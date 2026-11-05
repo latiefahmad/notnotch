@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/logo/notnotch-icon.svg" alt="NotNotch logo" width="112" height="112" />
+  <img src="assets/logo/notnotch.png" alt="NotNotch logo" width="96" height="96" />
 </p>
 
 <h1 align="center">NotNotch</h1>
