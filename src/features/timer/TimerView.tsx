@@ -1,0 +1,337 @@
+import { useEffect, useRef, useState } from "react";
+import { AnimatePresence, motion } from "motion/react";
+import { AlarmIcon, ArrowCounterClockwise, Check, CheckCircle, Pause, PencilSimple, PictureInPicture, Play, SpeakerSimpleHigh, SpeakerSimpleSlash, X } from "@phosphor-icons/react";
+import { content, pulse, springs } from "../../design/motion";
+import {
+  MAX_MINUTES,
+  MIN_MINUTES,
+  focusMuted,
+  formatClock,
+  presets,
+  ringing,
+  timer,
+  timerActions,
+  useRemaining,
+  type TimerMode,
+} from "./store";
+import { Look } from "./Look";
+import { modeTint } from "./looks";
+import { detached, toggleDetached } from "./detach";
+import { settings } from "../../settings/store";
+import { HeaderActions, HeaderButton } from "../../notch/header";
+import { isNative } from "../../platform/native";
+import { t } from "../../i18n";
+
+const modeLabel: Record<TimerMode, string> = { focus: "Fokus", break: "Pause" };
+
+/*
+ *   [Focus | Break]               15  25  45  [37]  [✎]
+ *   24:59  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  [↺] [⏯]
+ *
+ * Custom time: ✎ opens a minutes field, or scroll over the big time
+ * (±1 min, Shift ±5), only while the timer isn't running.
+ */
+export function TimerView() {
+  const s = timer.use();
+  return (
+    <>
+      <TimerHeader />
+      {s.finished ? <FinishedView /> : <SetupView />}
+    </>
+  );
+}
+
+/** Mutes the focus sound for now, and pops the timer into its own small always-on-top window, or takes it back. */
+function TimerHeader() {
+  const open = detached.use();
+  const sound = settings.use().timer.focusSound;
+  const muted = focusMuted.use();
+  if (!isNative && sound === "off") return null;
+  return (
+    <HeaderActions>
+      {sound !== "off" && (
+        <HeaderButton label={muted ? t("Fokus-Klang einschalten") : t("Fokus-Klang stummschalten")} onClick={() => focusMuted.set(!muted)}>
+          {muted ? <SpeakerSimpleSlash size={14} weight="bold" /> : <SpeakerSimpleHigh size={14} weight="bold" />}
+        </HeaderButton>
+      )}
+      {isNative && (
+        <HeaderButton label={open ? t("Timer-Fenster schließen") : t("Timer abdocken")} active={open} onClick={toggleDetached}>
+          <PictureInPicture size={14} weight="bold" />
+        </HeaderButton>
+      )}
+    </HeaderActions>
+  );
+}
+
+/*
+ *   ✓ Focus finished
+ *   0:00  ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  [🔕] or [✕]
+ *
+ * Stays until dismissed. While ringing: stop the alarm; after that only ✕.
+ */
+function FinishedView() {
+  const s = timer.use();
+  const ring = ringing.use();
+  const { look, color } = settings.use().timer;
+  const tint = modeTint(s.mode, color);
+  return (
+    <motion.div
+      className="flex h-full flex-col justify-between px-5 pt-1 pb-2"
+      initial={{ opacity: 0, filter: "blur(4px)" }}
+      animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+    >
+      <div className="flex h-7 items-center gap-2 text-footnote font-semibold" style={{ color: tint }}>
+        {ring ? (
+          <motion.span className="flex" animate={{ opacity: [1, 0.35] }} transition={pulse}>
+            <AlarmIcon size={15} weight="fill" />
+          </motion.span>
+        ) : (
+          <CheckCircle size={15} weight="fill" />
+        )}
+        {t(s.mode === "focus" ? "Fokus abgelaufen" : "Pause abgelaufen")}
+        <span className="font-medium text-label-3">· {formatClock(s.duration)}</span>
+      </div>
+      <div className="flex items-center gap-4">
+        <motion.div
+          className="flex min-w-0 flex-1"
+          animate={{ opacity: ring ? [1, 0.45] : 1 }}
+          transition={ring ? pulse : content.enter}
+        >
+          <Look look={look} remaining={0} duration={s.duration} running={false} mode={s.mode} tint={tint} h={44} />
+        </motion.div>
+        <AnimatePresence mode="popLayout" initial={false}>
+          <motion.div
+            key={ring ? "silence" : "close"}
+            initial={{ opacity: 0, transform: "scale(0.6)", filter: "blur(3px)" }}
+            animate={{ opacity: 1, transform: "scale(1)", filter: "blur(0px)" }}
+            exit={{ opacity: 0, transform: "scale(0.6)", filter: "blur(3px)" }}
+            transition={content.exit}
+          >
+            {ring ? (
+              <RoundButton label={t("Alarm stoppen")} onClick={timerActions.silence} tint={tint}>
+                <SpeakerSimpleSlash size={17} weight="fill" />
+              </RoundButton>
+            ) : (
+              <RoundButton label={t("Schließen")} onClick={timerActions.dismiss}>
+                <X size={16} weight="bold" />
+              </RoundButton>
+            )}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+    </motion.div>
+  );
+}
+
+function SetupView() {
+  const s = timer.use();
+  const look = settings.use().timer.look;
+  // Only the HUD shows tenths; the other looks change once a second.
+  const remaining = useRemaining(look === "hud");
+  const running = s.endsAt !== null;
+  const tint = modeTint(s.mode, settings.use().timer.color);
+  const [editing, setEditing] = useState(false);
+  const clockRef = useRef<HTMLDivElement>(null);
+
+  // The wheel sets the minutes. Only when not started; passive:false for preventDefault.
+  const editable = !running && remaining === s.duration;
+  useEffect(() => {
+    const el = clockRef.current;
+    if (!el || !editable) return;
+    const onWheel = (e: WheelEvent) => {
+      e.preventDefault();
+      const step = (e.shiftKey ? 5 : 1) * (e.deltaY < 0 ? 1 : -1);
+      timerActions.setMinutes(Math.round(timer.get().duration / 60) + step);
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [editable]);
+
+  const custom = s.custom?.[s.mode];
+  const chips = custom && !presets[s.mode].includes(custom) ? [...presets[s.mode], custom] : presets[s.mode];
+
+  return (
+    <div className="flex h-full flex-col justify-between px-5 pt-1 pb-2">
+      <div className="flex h-7 items-center justify-between">
+        <Segmented
+          value={s.mode}
+          onChange={(m) => {
+            setEditing(false);
+            timerActions.select(m, s.custom?.[m] ?? presets[m][m === "focus" ? 1 : 0]);
+          }}
+        />
+        {/* Chips and minutes field are stacked right-aligned, so nothing jumps sideways on switch. */}
+        <div className="relative flex h-6 flex-1 justify-end">
+        <AnimatePresence initial={false}>
+          {editing ? (
+            <MinutesInput
+              key="input"
+              initial={Math.round(s.duration / 60)}
+              tint={tint}
+              onDone={(minutes) => {
+                if (minutes !== null) timerActions.setMinutes(minutes);
+                setEditing(false);
+              }}
+            />
+          ) : (
+            <motion.div
+              key="chips"
+              className="absolute top-0 end-0 flex gap-1"
+              initial={{ opacity: 0, filter: "blur(4px)" }}
+              animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+              exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+            >
+              {chips.map((d) => (
+                <button
+                  key={d}
+                  onClick={() => timerActions.select(s.mode, d)}
+                  className={`pressable pressable-fill tabular h-6 min-w-7 rounded-full px-2.5 text-caption font-medium ${
+                    d === s.duration ? "bg-fill-2 text-label" : "text-label-3"
+                  }`}
+                >
+                  {d / 60}
+                </button>
+              ))}
+              <button
+                aria-label={t("Eigene Zeit")}
+                title={t("Eigene Zeit (oder Mausrad über der Zeit)")}
+                onClick={() => setEditing(true)}
+                className="pressable pressable-fill flex size-6 items-center justify-center rounded-full text-label-3 hover:text-label-2"
+              >
+                <PencilSimple size={12} weight="bold" />
+              </button>
+            </motion.div>
+          )}
+        </AnimatePresence>
+        </div>
+      </div>
+
+      <div className="flex items-center gap-4">
+        <div ref={clockRef} title={editable ? t("Mausrad: ±1 min, Shift: ±5 min") : undefined} className="flex min-w-0 flex-1">
+          <Look look={look} remaining={remaining} duration={s.duration} running={running} mode={s.mode} tint={tint} h={44} />
+        </div>
+        <div className="flex gap-1.5">
+          <RoundButton label={t("Zurücksetzen")} onClick={timerActions.reset} disabled={editable}>
+            <ArrowCounterClockwise size={16} weight="bold" />
+          </RoundButton>
+          <RoundButton
+            label={running ? t("Pause") : t("Start")}
+            onClick={running ? timerActions.pause : timerActions.start}
+            tint={tint}
+          >
+            <AnimatePresence mode="popLayout" initial={false}>
+              <motion.span
+                key={running ? "pause" : "play"}
+                className="flex"
+                initial={{ opacity: 0, transform: "scale(0.6)", filter: "blur(3px)" }}
+                animate={{ opacity: 1, transform: "scale(1)", filter: "blur(0px)" }}
+                exit={{ opacity: 0, transform: "scale(0.6)", filter: "blur(3px)" }}
+                transition={content.exit}
+              >
+                {running ? <Pause size={18} weight="fill" /> : <Play size={18} weight="fill" />}
+              </motion.span>
+            </AnimatePresence>
+          </RoundButton>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/** Minutes field: Enter/✓ applies, Esc or blur cancels. */
+function MinutesInput(props: { initial: number; tint: string; onDone: (minutes: number | null) => void }) {
+  const [value, setValue] = useState(String(props.initial));
+  const ref = useRef<HTMLInputElement>(null);
+  const minutes = Number(value);
+  const valid = Number.isFinite(minutes) && minutes >= MIN_MINUTES && minutes <= MAX_MINUTES;
+
+  useEffect(() => {
+    ref.current?.focus({ preventScroll: true });
+    ref.current?.select();
+  }, []);
+
+  return (
+    <motion.form
+      className="absolute top-0 end-0 flex items-center gap-1.5"
+      initial={{ opacity: 0, filter: "blur(4px)" }}
+      animate={{ opacity: 1, filter: "blur(0px)", transition: content.enter }}
+      exit={{ opacity: 0, filter: "blur(4px)", transition: content.exit }}
+      onSubmit={(e) => {
+        e.preventDefault();
+        if (valid) props.onDone(minutes);
+      }}
+    >
+      <div className="flex h-6 items-center gap-1 rounded-full bg-fill-2 pe-2.5 ps-2.5">
+        <input
+          ref={ref}
+          value={value}
+          inputMode="numeric"
+          maxLength={3}
+          onChange={(e) => setValue(e.target.value.replace(/\D/g, ""))}
+          onKeyDown={(e) => {
+            // Only catch Esc here, don't close the whole notch.
+            if (e.key === "Escape") {
+              e.stopPropagation();
+              props.onDone(null);
+            }
+          }}
+          onBlur={(e) => {
+            if (!e.currentTarget.form?.contains(e.relatedTarget as Node)) props.onDone(null);
+          }}
+          className="tabular w-7 bg-transparent text-end text-caption font-semibold text-label outline-none"
+        />
+        <span className="text-caption text-label-3">min</span>
+      </div>
+      <button
+        type="submit"
+        aria-label={t("Übernehmen")}
+        disabled={!valid}
+        className="pressable flex size-6 items-center justify-center rounded-full disabled:opacity-30"
+        style={{ color: props.tint, backgroundColor: `color-mix(in srgb, ${props.tint} 18%, transparent)` }}
+      >
+        <Check size={12} weight="bold" />
+      </button>
+    </motion.form>
+  );
+}
+
+function Segmented({ value, onChange }: { value: TimerMode; onChange: (m: TimerMode) => void }) {
+  return (
+    <div className="flex rounded-full bg-fill-1 p-0.5">
+      {(Object.keys(modeLabel) as TimerMode[]).map((m) => (
+        <button
+          key={m}
+          onClick={() => onChange(m)}
+          className={`relative h-6 rounded-full px-3 text-caption font-medium transition-colors duration-150 ${
+            m === value ? "text-label" : "text-label-3 hover:text-label-2"
+          }`}
+        >
+          {m === value && (
+            <motion.span layoutId="timer-mode" className="absolute inset-0 rounded-full bg-fill-3" transition={springs.snappy} />
+          )}
+          <span className="relative">{t(modeLabel[m])}</span>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function RoundButton(props: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tint?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <button
+      aria-label={props.label}
+      onClick={props.onClick}
+      disabled={props.disabled}
+      className="pressable pressable-fill flex size-10 items-center justify-center rounded-full bg-fill-1 text-label disabled:opacity-30"
+      style={props.tint ? { color: props.tint, backgroundColor: `color-mix(in srgb, ${props.tint} 18%, transparent)` } : undefined}
+    >
+      {props.children}
+    </button>
+  );
+}

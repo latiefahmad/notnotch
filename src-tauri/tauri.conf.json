@@ -1,0 +1,112 @@
+{
+  "$schema": "https://schema.tauri.app/config/2",
+  "productName": "NotNotch",
+  "version": "1.0.0",
+  "identifier": "io.github.latiefahmad.notnotch",
+  "build": {
+    "beforeDevCommand": "npm run dev",
+    "devUrl": "http://localhost:1420",
+    "beforeBuildCommand": "npm run build",
+    "frontendDist": "../dist"
+  },
+  "app": {
+    "macOSPrivateApi": true,
+    "withGlobalTauri": false,
+    "windows": [
+      {
+        "label": "notch",
+        "create": false,
+        "title": "NotNotch",
+        "width": 760,
+        "height": 560,
+        "x": 0,
+        "y": 0,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "dragDropEnabled": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,msEdgeTranslate,SpareRendererForSitePerProcess,OptimizationHints,MediaRouter,AutofillServerCommunication --disable-background-networking --disable-component-update --disable-sync --no-pings --renderer-process-limit=1"
+      },
+      {
+        "label": "mirror",
+        "create": false,
+        "url": "mirror.html",
+        "title": "NotNotch",
+        "focusable": false,
+        "width": 760,
+        "height": 560,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "dragDropEnabled": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,msEdgeTranslate,SpareRendererForSitePerProcess,OptimizationHints,MediaRouter,AutofillServerCommunication --disable-background-networking --disable-component-update --disable-sync --no-pings --renderer-process-limit=1"
+      },
+      {
+        "label": "timer",
+        "create": false,
+        "url": "timer.html",
+        "title": "NotNotch Timer",
+        "focusable": false,
+        "width": 320,
+        "height": 84,
+        "transparent": true,
+        "decorations": false,
+        "shadow": false,
+        "resizable": false,
+        "maximizable": false,
+        "minimizable": false,
+        "alwaysOnTop": true,
+        "skipTaskbar": true,
+        "visible": false,
+        "focus": false,
+        "dragDropEnabled": false,
+        "additionalBrowserArgs": "--disable-features=msWebOOUI,msPdfOOUI,msSmartScreenProtection,Translate,msEdgeTranslate,SpareRendererForSitePerProcess,OptimizationHints,MediaRouter,AutofillServerCommunication --disable-background-networking --disable-component-update --disable-sync --no-pings --renderer-process-limit=1"
+      }
+    ],
+    "security": {
+      "csp": "default-src 'self'; connect-src ipc: http://ipc.localhost https://lrclib.net https://api.open-meteo.com https://geocoding-api.open-meteo.com https://get.geojs.io https://ipwho.is https://raw.githubusercontent.com; img-src 'self' data: https://cdn.discordapp.com https://github.com https://avatars.githubusercontent.com; style-src 'self' 'unsafe-inline'; font-src 'self' data:; script-src 'self'; frame-src http://notnotchplugin.localhost; object-src 'none'; base-uri 'self'"
+    }
+  },
+  "bundle": {
+    "active": true,
+    "targets": [
+      "nsis"
+    ],
+    "icon": [
+      "icons/32x32.png",
+      "icons/128x128.png",
+      "icons/icon.ico"
+    ],
+    "createUpdaterArtifacts": true,
+    "windows": {
+      "nsis": {
+        "installerIcon": "icons/icon.ico"
+      }
+    }
+  },
+  "plugins": {
+    "updater": {
+      "pubkey": "dW50cnVzdGVkIGNvbW1lbnQ6IG1pbmlzaWduIHB1YmxpYyBrZXk6IDE3QUQzMUQ4OTQ5Mzc0OUYKUldTZmRKT1UyREd0RnpOUWNRazhwU29UbThjYi9aa2lNaVZQUWF1aHZkYUhGNXRVQ1V1YVhMcDcK",
+      "endpoints": [
+        "https://github.com/latiefahmad/notnotch/releases/latest/download/latest.json"
+      ],
+      "windows": {
+        "installMode": "passive"
+      }
+    }
+  }
+}

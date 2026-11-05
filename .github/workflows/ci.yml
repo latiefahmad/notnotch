@@ -1,0 +1,61 @@
+name: CI
+
+# Checks for every pull request and every non-release push to main. release.yml only runs the tests when a version bump
+# publishes a release, so without this workflow nothing would run on pull requests at all. Toolchain versions and cache
+# settings mirror release.yml, so a run that passes CI passes the release build's test steps too.
+on:
+  pull_request:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  web:
+    # Everything from src/: the TypeScript build, the node --test suite and the i18n key check.
+    name: Web — typecheck, tests, i18n
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Typecheck
+        run: npm run typecheck
+      - name: Test
+        run: npm test
+      - name: i18n key check
+        run: npm run i18n
+
+  rust:
+    # The Rust side, on Windows like the release build (platform-specific code and tests run for real here). The
+    # frontend is not bundled; release.yml runs the same command with npm ci alongside.
+    name: Rust — tests
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Test
+        shell: pwsh
+        run: |
+          cd src-tauri
+          cargo test --lib
+          if ($LASTEXITCODE) { exit 1 }

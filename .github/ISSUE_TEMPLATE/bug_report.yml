@@ -1,0 +1,66 @@
+name: Bug report
+description: Something in NotNotch does not work as it should.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to report this. Please search the open issues first, in case it is already known.
+
+        If NotNotch crashed, the crash log helps a lot. It is `crash.log` in `%LOCALAPPDATA%\io.github.latiefahmad.notnotch\logs` for the installed app, or in `data\logs` next to NotNotch.exe for the portable build. Check it for anything private before you attach it.
+  - type: input
+    id: windows
+    attributes:
+      label: Windows version
+      description: Press Win + R, type `winver` and copy the line with the version and build.
+      placeholder: Windows 11 24H2, build 26100.2314
+    validations:
+      required: true
+  - type: input
+    id: version
+    attributes:
+      label: NotNotch version
+      description: Shown in Settings → General → Updates.
+      placeholder: 1.0.0
+    validations:
+      required: true
+  - type: dropdown
+    id: install
+    attributes:
+      label: Install type
+      options:
+        - Microsoft Store
+        - Installer from GitHub Releases
+        - Portable zip
+        - Built from source
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Steps to reproduce
+      placeholder: |
+        1. Open the notch
+        2. Go to ...
+        3. Click ...
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behaviour
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behaviour
+      description: What happened instead. Screenshots or a short recording help.
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Crash log or other details
+      description: Paste the relevant part of crash.log, or anything else that might matter (monitors and scaling, screen edge, the tool in use).
+      render: text

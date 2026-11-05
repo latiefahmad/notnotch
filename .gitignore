@@ -1,0 +1,36 @@
+node_modules
+dist
+dist-store
+src-tauri/target
+src-tauri/gen
+*.local
+*.tsbuildinfo
+
+# Launch-video workspace (frames, renders, intermediates)
+brag-output/
+
+# Agent working files, kept local
+CLAUDE.md
+AGENTS.md
+PLAN.md
+PLAN-REVIEW-LOG.md
+.claude/
+.codex/
+.design/
+src-tauri/target-shared
+.agent-notes/
+src-tauri/target-dbg
+src-tauri/target-store
+/target-shared
+
+# Secrets and key material stay out of version control (the app reads secrets from the OS credential store; CI and
+# release build keys are set as GitHub repository secrets or kept on the build machine only).
+.env*
+*.pem
+*.key
+*.p12
+*.pfx
+vault.bin
+
+# Where Tauri drops sidecar binaries (src-tauri/src/bin)
+src-tauri/bin

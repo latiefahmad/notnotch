@@ -1,0 +1,269 @@
+name: Release
+
+# Pushing a new version (src-tauri/tauri.conf.json) to main publishes a release: signed installers and portable zips for
+# Windows x64 and arm64, disk images for Macs with Apple silicon and Intel, their .sig files, latest.json for the in-app
+# updater and, uploaded last, SHA256SUMS over all of them.
+# The release stays a prerelease, which the updater's releases/latest skips, until SHA256SUMS is up; a run that fails
+# before that leaves the previous version as the latest, and the next push builds this one again.
+# Pushes without a version bump only run the check and stop.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+# One run at a time: a push during a release build waits, instead of building and publishing the same version twice.
+concurrency:
+  group: release
+  cancel-in-progress: false
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+      release: ${{ steps.version.outputs.release }}
+      notes: ${{ steps.version.outputs.notes }}
+      highlights: ${{ steps.version.outputs.highlights }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(jq -r .version src-tauri/tauri.conf.json)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "notnotch-v$version" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            # Still a prerelease: an earlier run stopped before the checksums job. Start it again from scratch.
+            if [ "$(gh release view "notnotch-v$version" -R "$GITHUB_REPOSITORY" --json isPrerelease -q .isPrerelease)" = "true" ]; then
+              echo "Release v$version is incomplete, building it again."
+              gh release delete "notnotch-v$version" -R "$GITHUB_REPOSITORY" --cleanup-tag --yes
+              # The checkout fetched the tag before it went: drop it here too, or the notes below would start from it.
+              git tag -d "notnotch-v$version"
+            else
+              echo "Release v$version already exists, nothing to do."
+              echo "release=false" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          fi
+          echo "release=true" >> "$GITHUB_OUTPUT"
+          # Hand-written notes with screenshots (docs/releases/vX.Y.Z.md), if there are any.
+          {
+            echo "highlights<<EOF"
+            cat "docs/releases/v$version.md" 2>/dev/null && echo || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+          # Changes since the previous release tag.
+          previous=$(git tag --list 'notnotch-v*' --sort=-v:refname | head -n 1)
+          range=${previous:+$previous..HEAD}
+          {
+            echo "notes<<EOF"
+            git log --no-merges --pretty='- %s' $range | grep -v '^- Merge' || true
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+  # Both architectures in one job, one after the other: the second tauri-action run finds the release by its tag and
+  # merges its entries into the latest.json the first one wrote, and nothing else writes latest.json at the same time.
+  # arm64 is cross-compiled on the x64 runner (MSVC ARM64 build tools and clang, which ring needs, are in the image).
+  build:
+    needs: check
+    if: needs.check.outputs.release == 'true'
+    runs-on: windows-latest
+    env:
+      # Every tauri-action run (these two and the Mac job's) passes the same body: the release keeps the one it was created
+      # with, and latest.json takes its notes from the run that writes it last.
+      RELEASE_BODY: &release_body |
+        **Install:** download `NotNotch_${{ needs.check.outputs.version }}_x64-setup.exe` below and run it. No admin rights or developer tools needed. On a Windows on ARM PC (Snapdragon and other ARM64 laptops), take `NotNotch_${{ needs.check.outputs.version }}_arm64-setup.exe` instead.
+        Already installed? The app offers this version under **Settings → General → Updates**.
+
+        **Portable:** `NotNotch-${{ needs.check.outputs.version }}-Portable-x64.zip` (or `-Portable-arm64.zip` on ARM) needs no install: unzip it anywhere you can write to and run NotNotch.exe. It keeps its data in a `data` folder next to it and updates itself in place.
+
+        **Mac:** `NotNotch_${{ needs.check.outputs.version }}_aarch64.dmg` for Apple silicon (M1 and later), `NotNotch_${{ needs.check.outputs.version }}_x64.dmg` for Intel. Drag NotNotch to Applications. The app is not notarized yet: on first launch macOS refuses it, then **System Settings → Privacy & Security → Open Anyway**. Some tools are Windows-only for now and don't show on a Mac.
+
+        **Checksums:** `SHA256SUMS` lists the SHA-256 of every file of this release. Check a download with `sha256sum -c SHA256SUMS --ignore-missing`, or in PowerShell compare `Get-FileHash <file>` with its line.
+
+        Windows SmartScreen may warn because the installer is not code-signed yet: **More info → Run anyway**.
+
+        ${{ needs.check.outputs.highlights }}
+
+        ### Changes
+        ${{ needs.check.outputs.notes }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: x86_64-pc-windows-msvc,aarch64-pc-windows-msvc
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      - name: Test
+        shell: pwsh
+        run: |
+          npm test
+          if ($LASTEXITCODE) { exit 1 }
+          cd src-tauri
+          cargo test --lib
+          if ($LASTEXITCODE) { exit 1 }
+      # notnotch-notify ships in the portable zips (scripts/portable-package.ps1): a missing exe must stop the run before
+      # tauri-action publishes anything. Building it for arm64 here also compiles the app's library and every dependency
+      # for arm64, so a cross-compile problem stops the run before the x64 release is out.
+      - name: Build notnotch-notify
+        shell: pwsh
+        working-directory: src-tauri
+        run: |
+          foreach ($target in 'x86_64-pc-windows-msvc', 'aarch64-pc-windows-msvc') {
+            cargo build --release --bin notnotch-notify --target $target
+            if ($LASTEXITCODE) { exit 1 }
+            if (-not (Test-Path "target/$target/release/notnotch-notify.exe")) { Write-Error "target/$target/release/notnotch-notify.exe is missing"; exit 1 }
+          }
+      - name: Installer x64
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          args: --target x86_64-pc-windows-msvc
+          tagName: notnotch-v__VERSION__
+          releaseName: notnotch-v__VERSION__
+          releaseDraft: false
+          prerelease: true
+          releaseBody: ${{ env.RELEASE_BODY }}
+      # latest.json gains windows-aarch64 and windows-aarch64-nsis next to the x64 entries.
+      - name: Installer arm64
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          args: --target aarch64-pc-windows-msvc
+          tagName: notnotch-v__VERSION__
+          releaseName: notnotch-v__VERSION__
+          releaseDraft: false
+          prerelease: true
+          releaseBody: ${{ env.RELEASE_BODY }}
+
+      # Portable zips next to the installers: signed like them, and listed in latest.json as windows-x86_64-portable and
+      # windows-aarch64-portable, the entries a portable copy updates from (src-tauri/src/portable.rs).
+      - name: Portable packages
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          $tag = "v$env:VERSION"
+          gh release download $tag --pattern latest.json --clobber
+          if ($LASTEXITCODE) { exit 1 }
+          foreach ($build in @(@{ Target = 'x86_64-pc-windows-msvc'; Arch = 'x86_64'; Name = 'x64' }, @{ Target = 'aarch64-pc-windows-msvc'; Arch = 'aarch64'; Name = 'arm64' })) {
+            $zip = "NotNotch-$env:VERSION-Portable-$($build.Name).zip"
+            ./scripts/portable-package.ps1 -Exe "src-tauri/target/$($build.Target)/release/notnotch.exe" -Destination $zip
+            npx tauri signer sign $zip
+            if ($LASTEXITCODE) { exit 1 }
+            gh release upload $tag $zip "$zip.sig" --clobber
+            if ($LASTEXITCODE) { exit 1 }
+            # Node, not ConvertFrom-Json: that turns pub_date into a DateTime and writes it back in another format.
+            # The script checks that pub_date and every other entry are unchanged before it writes.
+            node scripts/portable-latest.mjs latest.json $build.Arch "$zip.sig" "https://github.com/$env:GITHUB_REPOSITORY/releases/download/$tag/$zip"
+            if ($LASTEXITCODE) { exit 1 }
+          }
+          gh release upload $tag latest.json --clobber
+          if ($LASTEXITCODE) { exit 1 }
+
+  # The Mac version, after the Windows one so the two never write latest.json at the same time: a .dmg and the updater's
+  # .app.tar.gz for Apple silicon, then for Intel (cross-compiled on the arm64 runner). Not signed or notarized yet.
+  macos:
+    needs: [check, build]
+    if: needs.check.outputs.release == 'true'
+    runs-on: macos-latest
+    env:
+      RELEASE_BODY: *release_body
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: dtolnay/rust-toolchain@b725eda525362e7cf34af9a7243cac1e3f01a7ec # stable
+        with:
+          toolchain: stable
+          targets: aarch64-apple-darwin,x86_64-apple-darwin
+      - uses: swatinem/rust-cache@d1527c8f67ef9af357290475d4af4b0fab8f12e0 # v2
+        with:
+          workspaces: src-tauri
+      - run: npm ci
+      # The Mac code (src-tauri/src/macos/) only compiles here; its tests run before anything is published.
+      - name: Test
+        working-directory: src-tauri
+        run: cargo test --lib
+      - name: Disk image Apple silicon
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          args: --target aarch64-apple-darwin
+          tagName: notnotch-v__VERSION__
+          releaseName: notnotch-v__VERSION__
+          releaseDraft: false
+          prerelease: true
+          releaseBody: ${{ env.RELEASE_BODY }}
+      - name: Disk image Intel
+        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ""
+        with:
+          args: --target x86_64-apple-darwin
+          tagName: notnotch-v__VERSION__
+          releaseName: notnotch-v__VERSION__
+          releaseDraft: false
+          prerelease: true
+          releaseBody: ${{ env.RELEASE_BODY }}
+
+  # Last, once every other asset is in place: SHA256SUMS over all of them, in the format `sha256sum -c` reads.
+  checksums:
+    needs: [check, build, macos]
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.check.outputs.version }}
+        run: |
+          set -euo pipefail
+          tag="notnotch-v$VERSION"
+          mkdir assets
+          cd assets
+          gh release download "$tag" -R "$GITHUB_REPOSITORY" --pattern '*'
+          rm -f SHA256SUMS
+          # The release is complete: both installers and zips with their signatures, and all six updater entries.
+          for f in "NotNotch_${VERSION}_x64-setup.exe" "NotNotch_${VERSION}_arm64-setup.exe" "NotNotch-${VERSION}-Portable-x64.zip" "NotNotch-${VERSION}-Portable-arm64.zip"; do
+            if [ ! -s "$f" ] || [ ! -s "$f.sig" ]; then echo "::error::$f or $f.sig is missing from the release"; exit 1; fi
+          done
+          for f in "NotNotch_${VERSION}_aarch64.dmg" "NotNotch_${VERSION}_x64.dmg"; do
+            if [ ! -s "$f" ]; then echo "::error::$f is missing from the release"; exit 1; fi
+          done
+          for k in windows-x86_64 windows-x86_64-nsis windows-x86_64-portable windows-aarch64 windows-aarch64-nsis windows-aarch64-portable darwin-aarch64 darwin-x86_64; do
+            jq -e --arg k "$k" '.platforms[$k].url and .platforms[$k].signature' latest.json >/dev/null || { echo "::error::latest.json has no $k entry"; exit 1; }
+          done
+          sha256sum -- * > ../SHA256SUMS
+          sha256sum -c ../SHA256SUMS
+          cd ..
+          cat SHA256SUMS
+          gh release upload "$tag" SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
+          # Every file is in place: only now does the release become the latest one, which the updater reads.
+          gh release edit "$tag" -R "$GITHUB_REPOSITORY" --prerelease=false --latest

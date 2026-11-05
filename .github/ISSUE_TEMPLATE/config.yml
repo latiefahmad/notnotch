@@ -1,0 +1,8 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Ask a question or share an idea
+    url: https://github.com/latiefahmad/notnotch/discussions
+    about: Questions, ideas and plugins go to Discussions; issues are for bugs and concrete requests.
+  - name: Support NotNotch on GitHub Sponsors
+    url: https://github.com/sponsors/latiefahmad
+    about: NotNotch is free. Voluntary donations help keep it going.

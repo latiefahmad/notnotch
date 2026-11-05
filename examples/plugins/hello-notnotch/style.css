@@ -1,0 +1,74 @@
+:root {
+  color-scheme: dark;
+  --label: #fff;
+  --label-2: rgb(255 255 255 / 0.7);
+  --label-3: rgb(255 255 255 / 0.45);
+  --fill-2: rgb(255 255 255 / 0.1);
+  --fill-3: rgb(255 255 255 / 0.16);
+  --accent: #419cff;
+  --font: system-ui, sans-serif;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  overflow: hidden;
+  background: transparent;
+  color: var(--label);
+  font: 13px/1.4 var(--font);
+}
+
+main {
+  display: flex;
+  gap: 20px;
+  height: 100%;
+  box-sizing: border-box;
+  padding: 4px 20px 12px;
+}
+
+section {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 10px;
+}
+
+.clock {
+  font-size: 44px;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+button {
+  height: 28px;
+  padding: 0 12px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--fill-2);
+  color: var(--label);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+button:hover {
+  background: var(--fill-3);
+}
+
+#zen {
+  margin: 0;
+  color: var(--label-2);
+  font-size: 15px;
+}
+
+.zen button {
+  align-self: flex-start;
+}

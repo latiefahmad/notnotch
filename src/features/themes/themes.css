@@ -1,0 +1,105 @@
+/* Translated from BrimDeck (Apache-2.0, github.com/MoFeng2223/BrimDeck), src/BrimDeck.Core/PanelThemes.HighContrast.cs and src/BrimDeck/MainWindow.ThemeFade.cs. */
+
+/*
+ * Theme tokens are set inline on <html> (store.ts). Registered as colours, so switching themes
+ * crossfades them like the cover accent instead of jumping.
+ */
+@property --color-notch { syntax: "<color>"; inherits: true; initial-value: #000; }
+@property --color-label { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.96); }
+@property --color-label-2 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.58); }
+@property --color-label-3 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.34); }
+@property --color-label-4 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.18); }
+@property --color-fill-1 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.06); }
+@property --color-fill-2 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.1); }
+@property --color-fill-3 { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.16); }
+@property --color-separator { syntax: "<color>"; inherits: true; initial-value: rgb(255 255 255 / 0.08); }
+@property --color-elevated { syntax: "<color>"; inherits: true; initial-value: #1c1c1e; }
+@property --color-green { syntax: "<color>"; inherits: true; initial-value: #30d158; }
+@property --color-red { syntax: "<color>"; inherits: true; initial-value: #ff453a; }
+@property --color-orange { syntax: "<color>"; inherits: true; initial-value: #ff9f0a; }
+@property --color-yellow { syntax: "<color>"; inherits: true; initial-value: #ffd60a; }
+@property --color-link { syntax: "<color>"; inherits: true; initial-value: #419cff; }
+@property --color-black { syntax: "<color>"; inherits: true; initial-value: #000; }
+@property --shape { syntax: "<color>"; inherits: true; initial-value: #000; }
+
+:root {
+  transition:
+    --color-notch 500ms ease,
+    --color-label 500ms ease,
+    --color-label-2 500ms ease,
+    --color-label-3 500ms ease,
+    --color-label-4 500ms ease,
+    --color-fill-1 500ms ease,
+    --color-fill-2 500ms ease,
+    --color-fill-3 500ms ease,
+    --color-separator 500ms ease,
+    --color-elevated 500ms ease,
+    --color-green 500ms ease,
+    --color-red 500ms ease,
+    --color-orange 500ms ease,
+    --color-yellow 500ms ease,
+    --color-link 500ms ease,
+    --color-black 500ms ease;
+}
+
+/*
+ * The cover tint (Settings, Themes): a glow of the cover colour from the panel's top, behind the
+ * content, so text keeps the theme's contrast. Only opacity and a registered colour move, no blur.
+ */
+@property --ambience { syntax: "<color>"; inherits: false; initial-value: transparent; }
+[data-ambience] {
+  opacity: 0;
+  background: radial-gradient(140% 110% at 50% 0%, var(--ambience), transparent 75%);
+  transition: opacity 600ms ease, --ambience 600ms ease;
+}
+/* Strong enough to read as the song's colour on a real, often dark cover; text keeps its contrast on top of it. */
+[data-ambience="on"] { opacity: 0.32; }
+:root[data-theme="light"] [data-ambience="on"] { opacity: 0.2; }
+
+/* The notch's own colour: black closed, the theme's background open (NotchShape.tsx). */
+[data-notch-shape] {
+  transition: --shape 300ms var(--ease-out);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root,
+  [data-notch-shape],
+  [data-ambience] {
+    transition: none;
+  }
+}
+
+/*
+ * Windows high contrast: the system's colours whatever theme is chosen (BrimDeck's
+ * PanelThemes.HighContrast). Text is the window text on the window colour, quiet text the gray
+ * text, everything the theme would tint the highlight; lines and fills are the window text at a
+ * low share. !important beats the inline theme on <html>, the closed row and the accent.
+ */
+@media (forced-colors: active) {
+  [data-ambience] {
+    display: none;
+  }
+  :root,
+  [data-theme-ink],
+  [style*="--accent"] {
+    --color-notch: Canvas !important;
+    --notch-closed: Canvas !important;
+    --color-label: CanvasText !important;
+    --color-label-2: CanvasText !important;
+    --color-label-3: GrayText !important;
+    --color-label-4: GrayText !important;
+    --color-fill-1: color-mix(in srgb, CanvasText 10%, Canvas) !important;
+    --color-fill-2: color-mix(in srgb, CanvasText 14%, Canvas) !important;
+    --color-fill-3: color-mix(in srgb, CanvasText 22%, Canvas) !important;
+    --color-separator: color-mix(in srgb, CanvasText 30%, Canvas) !important;
+    --color-elevated: Canvas !important;
+    --color-black: Canvas !important;
+    --color-link: LinkText !important;
+    --color-green: Highlight !important;
+    --color-yellow: Highlight !important;
+    --color-orange: CanvasText !important;
+    --color-red: CanvasText !important;
+    --accent: Highlight !important;
+    --theme-accent: Highlight !important;
+  }
+}

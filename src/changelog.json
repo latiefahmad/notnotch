@@ -1,0 +1,44 @@
+[
+  {
+    "version": "1.0.0",
+    "date": "2026-11-05",
+    "items": [
+      {
+        "en": "The first public release: a notch at the edge of your Windows screen with music and synced lyrics, notices, timers, to-dos, screenshots and screen recording, a terminal, an app launcher, your GitHub activity, AI usage limits, live hardware stats, a read-only portfolio across brokers and more"
+      },
+      {
+        "en": "The closed notch comes as a notch, a capsule or a line on any screen edge; its readings row shows cover, timer, Discord call, AI quota, title or lyrics, hardware, brightness, equalizer, clock and GitHub"
+      },
+      {
+        "en": "Click or hover any part of the closed notch to open its tool, and any notice opens what it is about"
+      },
+      {
+        "en": "Now Playing: synced and word-by-word lyrics with translation and romanisation, Spectrum and Wave equalizers, an album-art tint and a player picker"
+      },
+      {
+        "en": "Capture: screenshots and screen recording with system audio and microphone, a Recorder for sound alone, a Camera tool to check yourself before a call, and Find on screen over every monitor"
+      },
+      {
+        "en": "A Calendar from ICS links or CalDAV, with a month view, notices before each event and Join buttons for Meet, Zoom, Teams and Webex"
+      },
+      {
+        "en": "Overview, Hardware with cores, GPUs, network, power, battery, temperatures and drives, AI usage with tokens and cost, and a portfolio in one base currency"
+      },
+      {
+        "en": "Your own plugins as sandboxed web widgets, and parts in the closed row with notnotch-notify, including answering a coding agent's permission requests from the notch"
+      },
+      {
+        "en": "Timer with Flip, Nixie, Ring, LCD and Analog looks, focus sounds for focus sessions, to-dos, a water reminder, a code scratchpad and a Shelf for drops"
+      },
+      {
+        "en": "Themes with an editor, a day and night switch, coloured icons, sixteen fonts and fifteen themes to choose from"
+      },
+      {
+        "en": "NotNotch in 11 languages, Arabic handled right to left, following Windows until you pick one in Settings"
+      },
+      {
+        "en": "Windows is where everything lives, with a first preview for Macs; ARM64 builds, a portable build that updates in place, and a SHA256SUMS file to check every release"
+      }
+    ]
+  }
+]

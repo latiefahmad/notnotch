@@ -1,0 +1,147 @@
+[package]
+name = "notnotch"
+version = "1.0.0"
+edition = "2021"
+license = "GPL-3.0-only"
+# src/bin/notnotch-notify.rs is a second binary; `cargo run` and the app mean this one.
+default-run = "notnotch"
+
+[lib]
+name = "notnotch_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[features]
+# Microsoft Store build (scripts/store-package.ps1): no self-update, never portable, Start with Windows through the package.
+store = []
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+# macos-private-api: a transparent window on a Mac (WKWebView's private API). Tauri 2 only checks it against
+# tauri.conf.json (macOSPrivateApi); no code depends on it, so it changes nothing on Windows.
+tauri = { version = "2", features = ["tray-icon", "macos-private-api"] }
+tauri-plugin-single-instance = "2"
+tauri-plugin-global-shortcut = "2"
+tauri-plugin-autostart = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = { version = "1", features = ["preserve_order"] }
+base64 = "0.22"
+arboard = { version = "3", features = ["image-data"] }
+image = { version = "0.25", default-features = false, features = ["png", "jpeg", "webp", "gif", "bmp", "ico", "tiff", "dds", "tga"] }
+cpal = "0.18"
+rustfft = "6"
+reqwest = { version = "0.13", default-features = false, features = ["native-tls", "json", "charset"] }
+sysinfo = "0.39"
+tokio = { version = "1", features = ["net", "io-util", "sync", "time", "macros"] }
+zip = { version = "8.6.0", default-features = false, features = ["deflate"] }
+quick-xml = "0.42.0"
+# Calendar: IANA time zones (bundled database on Windows, /usr/share/zoneinfo on a Mac) and the system zone.
+jiff = { version = "0.2", default-features = false, features = ["std", "tz-system", "tzdb-bundle-platform", "tzdb-zoneinfo"] }
+# KRC lyrics (Kugou) are zlib streams; already in the tree through zip.
+flate2 = "1"
+pinyin = { version = "0.11", default-features = false, features = ["with_tone"] }
+hmac = "0.12"
+sha1 = "0.10"
+sha2 = "0.10"
+rqrr = { version = "0.10", default-features = false }
+aes-gcm = "0.10"
+tauri-plugin-updater = "2"
+tauri-plugin-process = "2"
+
+# macOS (src/macos/): Keychain for the API keys; AppKit for the window level above the menu bar, the frontmost app and
+# the pasteboard. All of them are already in the tree through tauri and native-tls.
+[target.'cfg(target_os = "macos")'.dependencies]
+security-framework = "3"
+objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSArray", "NSString"] }
+objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "libc", "NSPasteboard", "NSResponder", "NSRunningApplication", "NSWindow", "NSWorkspace"] }
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.39"
+# Already in the tree through `windows`; #[implement] expands to `::windows_core` paths.
+windows-core = "0.62"
+# Also in the tree through `windows`, which does not re-export IIterable.
+windows-collections = "0.3"
+windows = { version = "0.62", features = [
+  "Foundation",
+  "Foundation_Collections",
+  "Security_Credentials",
+  "Security_Cryptography",
+  "Media_Control",
+  # Find on screen: Windows' own OCR (capture/find.rs).
+  "Media_Ocr",
+  "Graphics_Imaging",
+  "Globalization",
+  "Networking_Connectivity",
+  "UI_Shell",
+  "Storage_Streams",
+  "Win32_Foundation",
+  "Win32_Devices_DeviceAndDriverInstallation",
+  "Win32_Devices_Properties",
+  "Win32_Media_Audio",
+  "Win32_Media_Audio_Endpoints",
+  "Win32_Graphics_Dxgi",
+  "Win32_Graphics_Gdi",
+  "Win32_NetworkManagement_IpHelper",
+  "Win32_Networking_WinSock",
+  "Win32_System_Performance",
+  "Win32_System_Com",
+  "Win32_System_Com_StructuredStorage",
+  "Win32_System_Variant",
+  "Win32_Storage_FileSystem",
+  "Win32_System_Diagnostics_Etw",
+  "Win32_System_Registry",
+  "Win32_System_Time",
+  "Win32_Security_Credentials",
+  "Win32_Security_Cryptography",
+  "Win32_Security",
+  "Win32_Security_Authorization",
+  "Win32_NetworkManagement_NetManagement",
+  "Win32_System_Threading",
+  "Win32_UI_Shell",
+  "Win32_UI_Shell_PropertiesSystem",
+  "Win32_System_Power",
+  "Win32_System_SystemInformation",
+  "Win32_System_DataExchange",
+  "Win32_System_Memory",
+  "Win32_System_LibraryLoader",
+  "Win32_UI_Input_KeyboardAndMouse",
+  "Win32_UI_WindowsAndMessaging",
+  "Win32_System_Ole",
+  "Win32_UI_Shell_Common",
+  "Win32_System_Console",
+  "Win32_System_Pipes",
+  "Win32_System_JobObjects",
+  "Win32_System_Environment",
+  "Win32_System_IO",
+  "Win32_System_ProcessStatus",
+  "Win32_NetworkManagement_Ndis",
+  "Devices_Enumeration",
+  "Devices_Power",
+  "System_Power",
+  "ApplicationModel",
+  "UI_Notifications",
+  "UI_Notifications_Management",
+  "Win32_System_EventLog",
+  "Win32_System_RemoteDesktop",
+  "Win32_Graphics_Dwm",
+  "Graphics_Capture",
+  "Graphics_DirectX_Direct3D11",
+  "Security_Authorization_AppCapabilityAccess",
+  "Win32_Graphics_Direct3D",
+  "Win32_Graphics_Direct3D11",
+  "Win32_Graphics_Dxgi_Common",
+  "Win32_Media_MediaFoundation",
+  "Win32_System_WinRT_Direct3D11",
+  "Win32_System_WinRT_Graphics_Capture",
+  "Win32_UI_HiDpi",
+  "Win32_System_Wmi",
+  "Win32_Devices_Display",
+] }
+
+[profile.release]
+codegen-units = 1
+lto = true
+opt-level = "s"
+panic = "abort"
+strip = true

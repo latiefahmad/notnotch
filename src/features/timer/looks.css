@@ -1,0 +1,103 @@
+/* Timer looks (Look.tsx). Every animation runs only while the timer runs and stops under reduced motion. */
+:root {
+  /* Pixel dusk: sky from late sun (top rows) to night (bottom rows). */
+  --dusk-0: #ffd27a;
+  --dusk-1: #ffa25c;
+  --dusk-2: #ff6f7d;
+  --dusk-3: #d0569f;
+  --dusk-4: #8c5cf0;
+  --look-off: rgb(255 255 255 / 0.05);
+}
+
+.look-mono {
+  font-family: "Cascadia Mono", "Cascadia Code", Consolas, ui-monospace, monospace;
+  font-variant-numeric: tabular-nums;
+}
+
+.look-fade {
+  transition:
+    background-color 400ms ease,
+    fill 400ms ease,
+    opacity 400ms ease,
+    transform 400ms var(--ease-out);
+}
+
+.look-blink {
+  animation: look-blink 1s steps(1, end) infinite;
+}
+@keyframes look-blink {
+  50% {
+    opacity: 0.15;
+  }
+}
+
+.look-breathe {
+  animation: look-breathe 4s ease-in-out infinite;
+  transform-box: fill-box;
+  transform-origin: center;
+}
+@keyframes look-breathe {
+  0%,
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+  50% {
+    opacity: 0.45;
+    transform: scale(0.72);
+  }
+}
+
+.look-scan {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  height: 40%;
+  background: linear-gradient(180deg, transparent, color-mix(in srgb, currentColor 22%, transparent), transparent);
+  animation: look-scan 2.4s linear infinite;
+  pointer-events: none;
+}
+@keyframes look-scan {
+  from {
+    transform: translateY(-100%);
+  }
+  to {
+    transform: translateY(250%);
+  }
+}
+
+.look-glow {
+  filter: drop-shadow(0 0 3px color-mix(in srgb, currentColor 70%, transparent));
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .look-blink,
+  .look-breathe,
+  .look-scan {
+    animation: none;
+  }
+  .look-scan {
+    display: none;
+  }
+  .look-fade {
+    transition: none;
+  }
+}
+
+/* Nixie: the numeral glows, the glass is a faint outline in the same colour. */
+.look-nixie {
+  text-shadow:
+    0 0 4px currentColor,
+    0 0 10px color-mix(in srgb, currentColor 55%, transparent);
+}
+.look-tube {
+  border: 1px solid color-mix(in srgb, currentColor 22%, transparent);
+  border-radius: 40% / 22%;
+  background: color-mix(in srgb, currentColor 7%, transparent);
+}
+
+/* LCD: a pale display tinted with the chosen colour, read in dark ink whatever the theme. */
+.look-lcd {
+  background: color-mix(in srgb, var(--lcd) 30%, #dfe8cf);
+  box-shadow: inset 0 1px 3px rgb(0 0 0 / 0.35);
+}
