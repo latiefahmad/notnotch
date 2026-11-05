@@ -164,7 +164,7 @@ jobs:
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
-          $tag = "v$env:VERSION"
+          $tag = "notnotch-v$env:VERSION"
           gh release download $tag --pattern latest.json --clobber
           if ($LASTEXITCODE) { exit 1 }
           foreach ($build in @(@{ Target = 'x86_64-pc-windows-msvc'; Arch = 'x86_64'; Name = 'x64' }, @{ Target = 'aarch64-pc-windows-msvc'; Arch = 'aarch64'; Name = 'arm64' })) {
