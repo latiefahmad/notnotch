@@ -23,7 +23,7 @@ export interface Diagnostics {
 }
 
 /** The codes Rust reports (github.rs, fps.rs) and the update check's own. */
-const KNOWN = new Set(["check-failed", "not-found", "no-user", "token-rejected", "rate-limited", "failed", "no-admin", "relogin"]);
+const KNOWN = new Set(["check-failed", "install-failed", "signature", "not-found", "no-user", "token-rejected", "rate-limited", "failed", "no-admin", "relogin"]);
 
 /** A tracked error as a known code; anything else (free text from a server, a message with a path) becomes "other". */
 export function errorCode(value: string | null): string | null {

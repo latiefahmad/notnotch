@@ -1,5 +1,17 @@
 [
   {
+    "version": "1.1.1",
+    "date": "2026-11-07",
+    "items": [
+      {
+        "en": "Updates install again: this build is signed with the key the app trusts, and the release workflow now refuses to publish a release every installed copy would reject"
+      },
+      {
+        "en": "Control Panel and Apps & features show the publisher as latiefahmad instead of github"
+      }
+    ]
+  },
+  {
     "version": "1.1.0",
     "date": "2026-11-07",
     "items": [

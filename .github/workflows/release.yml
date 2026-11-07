@@ -131,7 +131,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target x86_64-pc-windows-msvc
           tagName: notnotch-v__VERSION__
@@ -145,7 +144,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target aarch64-pc-windows-msvc
           tagName: notnotch-v__VERSION__
@@ -161,7 +159,6 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
           VERSION: ${{ needs.check.outputs.version }}
         run: |
           $tag = "notnotch-v$env:VERSION"
@@ -213,7 +210,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target aarch64-apple-darwin
           tagName: notnotch-v__VERSION__
@@ -226,7 +222,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
-          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         with:
           args: --target x86_64-apple-darwin
           tagName: notnotch-v__VERSION__
@@ -240,6 +235,7 @@ jobs:
     needs: [check, build, macos]
     runs-on: ubuntu-latest
     steps:
+      - uses: actions/checkout@v4
       - env:
           GH_TOKEN: ${{ github.token }}
           VERSION: ${{ needs.check.outputs.version }}
@@ -260,6 +256,10 @@ jobs:
           for k in windows-x86_64 windows-x86_64-nsis windows-x86_64-portable windows-aarch64 windows-aarch64-nsis windows-aarch64-portable darwin-aarch64 darwin-x86_64; do
             jq -e --arg k "$k" '.platforms[$k].url and .platforms[$k].signature' latest.json >/dev/null || { echo "::error::latest.json has no $k entry"; exit 1; }
           done
+          # Every signature must come from the key the app ships (tauri.conf.json → plugins.updater.pubkey).
+          # Signed with another key (a wrong or rotated repository secret), every installed copy refuses the
+          # update as unverifiable: stop here, while the release is still a prerelease.
+          node ../scripts/verify-signing-key.mjs latest.json
           sha256sum -- * > ../SHA256SUMS
           sha256sum -c ../SHA256SUMS
           cd ..

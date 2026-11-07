@@ -10,6 +10,9 @@ import { build, fetchChangelog, updater, type ChangelogEntry, type UpdateHandle 
 
 type Phase = "idle" | "checking" | "current" | "available" | "downloading" | "error";
 
+/** Why the last attempt failed: the check itself, the download and install, or the package's signature. */
+type Failure = "check-failed" | "install-failed" | "signature";
+
 export const update = createStore<{
   current: string | null;
   phase: Phase;
@@ -21,7 +24,9 @@ export const update = createStore<{
   notes: ChangelogEntry[] | null;
   /** The Microsoft Store build: the Store updates it, so there is nothing to check here. */
   store: boolean;
-}>({ current: null, phase: "idle", version: null, progress: 0, checkedAt: null, notes: null, store: false });
+  /** Why the last attempt failed (Copy diagnostics); null while it works. */
+  error: Failure | null;
+}>({ current: null, phase: "idle", version: null, progress: 0, checkedAt: null, notes: null, store: false, error: null });
 
 let found: UpdateHandle | null = null;
 
@@ -35,25 +40,30 @@ export async function checkForUpdate() {
     found = await updater.check();
     const version = found?.version ?? null;
     const known = update.get();
-    update.set((s) => ({ ...s, phase: found ? "available" : "current", version, checkedAt: Date.now(), notes: version === known.version ? s.notes : null }));
+    update.set((s) => ({ ...s, phase: found ? "available" : "current", version, checkedAt: Date.now(), error: null, notes: version === known.version ? s.notes : null }));
     if (version && (version !== known.version || !known.notes)) {
       void fetchChangelog(version).then((notes) => update.get().version === version && update.set((s) => ({ ...s, notes })));
     }
   } catch {
     found = null;
-    update.set((s) => ({ ...s, phase: "error", checkedAt: Date.now() }));
+    update.set((s) => ({ ...s, phase: "error", error: "check-failed", checkedAt: Date.now() }));
   }
 }
 
 export async function installUpdate() {
   if (!found || update.get().phase !== "available") return;
-  update.set((s) => ({ ...s, phase: "downloading", progress: 0 }));
+  update.set((s) => ({ ...s, phase: "downloading", progress: 0, error: null }));
   try {
     // A portable copy in a folder it can't write only opened the download page: the update stays on offer.
     if ((await found.install((progress) => update.set((s) => ({ ...s, progress })))) === "page") update.set((s) => ({ ...s, phase: "available" }));
-  } catch {
-    update.set((s) => ({ ...s, phase: "error" }));
+  } catch (e) {
+    update.set((s) => ({ ...s, phase: "error", error: installFailure(e) }));
   }
+}
+
+/** The updater rejected the package's signature: it was signed with another key than the app accepts, and a retry cannot fix that. */
+function installFailure(e: unknown): Failure {
+  return /signature|minisign/i.test(String(e)) ? "signature" : "install-failed";
 }
 
 const DAY = 24 * 60 * 60 * 1000;

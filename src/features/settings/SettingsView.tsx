@@ -505,7 +505,7 @@ function DiagnosticsRow() {
         edge: s.dock.edge,
         anchor: s.dock.anchor,
         errors: [
-          ["update", u.phase === "error" ? "check-failed" : null],
+          ["update", u.phase === "error" ? (u.error ?? "check-failed") : null],
           ["github", github.get().error],
           ["fps", fps.get().error],
           ["discord", discordState.get().error],

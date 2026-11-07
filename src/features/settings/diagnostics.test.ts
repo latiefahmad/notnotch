@@ -56,6 +56,8 @@ test("diagnostics never carry the user name, the PC name or a path", () => {
 
 test("only code-like errors are kept", () => {
   assert.equal(errorCode("rate-limited"), "rate-limited");
+  assert.equal(errorCode("install-failed"), "install-failed");
+  assert.equal(errorCode("signature"), "signature");
   assert.equal(errorCode("andrea"), "other");
   assert.equal(errorCode("Token abgelehnt"), "other");
   assert.equal(errorCode("no such file: C:\\x"), "other");
