@@ -1,5 +1,20 @@
 [
   {
+    "version": "1.1.0",
+    "date": "2026-11-07",
+    "items": [
+      {
+        "en": "Much lighter on memory: tools load when you first open them, the closed notch's equalizer runs itself down while the notch is closed, clipboard cards fetch their thumbnails only when you look at them, and when the notch has been closed for a while every WebView2 window lowers its memory target"
+      },
+      {
+        "en": "Speicher sparen (Windows): Settings → General can run every window in one process, which measured about a third of the RAM; plugins then run inside the app, so the trade-off is yours to make and it applies at the next start"
+      },
+      {
+        "en": "The terminal keeps 1000 lines of scrollback by default, so a day of output no longer holds the whole app"
+      }
+    ]
+  },
+  {
     "version": "1.0.0",
     "date": "2026-11-05",
     "items": [
