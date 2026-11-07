@@ -66,6 +66,18 @@ export function setMemoryLow(low: boolean) {
   if (isNative) void invoke("memory_low", { low });
 }
 
+/**
+ * Low-memory mode (Windows): every WebView2 window in one process. Rust reads the marker before the window exists,
+ * so a change applies at the next start.
+ */
+export function lowMemoryGet(): Promise<boolean> {
+  return isNative ? invoke<boolean>("low_memory_get") : Promise.resolve(false);
+}
+
+export function lowMemorySet(on: boolean): Promise<void> {
+  return isNative ? invoke("low_memory_set", { on }) : Promise.resolve();
+}
+
 /** Focus mode: window fully click-through (Rust only counts clicks to exit). */
 export function setPassthrough(on: boolean) {
   if (isNative) void invoke("set_passthrough", { on });

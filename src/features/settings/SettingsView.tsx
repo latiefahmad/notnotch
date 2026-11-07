@@ -90,7 +90,7 @@ import { between, changelog, markSeen, useUnseen } from "../../lib/changelog";
 import { privacy, togglePresentation, usePresenting } from "../privacy/store";
 import { english, LANGUAGE_NAMES, LANGUAGES, t, tBackend, type LanguageSetting } from "../../i18n";
 import { ChangelogList } from "../whatsnew/ChangelogList";
-import { isMac } from "../../platform/native";
+import { isMac, lowMemoryGet, lowMemorySet } from "../../platform/native";
 import { ThemeSettings } from "../themes/ThemeSettings";
 import { hueVar, useIconColors, type Hue } from "../themes/hues";
 
@@ -731,10 +731,52 @@ function General() {
         )}
       </Row>
       <ShortcutRow />
+      {!isMac && <LowMemoryRow />}
       <Row label={t("Einrichtung")} hint={t("Voreinstellung, Aussehen und Öffnen noch einmal wählen")}>
         <Button onClick={() => navigate(setupTab.id)}>{t("Erneut starten")}</Button>
       </Row>
     </Group>
+  );
+}
+
+/**
+ * Windows: WebView2 runs every window in one process (src-tauri/src/memory.rs). Measured on a warm session: the whole
+ * app keeps about 63 MB instead of 152 MB. The renderer sandbox goes with it, so plugins run in the app's process;
+ * hence a choice, not the default. Rust reads the marker before the window exists → the next start.
+ */
+function LowMemoryRow() {
+  const [on, setOn] = useState<boolean | null>(null);
+  const [changed, setChanged] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  useEffect(() => {
+    void lowMemoryGet().then(setOn, () => setOn(null));
+  }, []);
+  if (on === null) return null;
+  const label = t("Speicher sparen");
+  return (
+    <Row
+      label={label}
+      hint={
+        error ??
+        (changed
+          ? t("Wirkt nach einem Neustart von NotNotch.")
+          : t("Alle Fenster in einem Prozess: deutlich weniger RAM, aber Plugins laufen nicht mehr abgeschottet."))
+      }
+    >
+      <Switch
+        label={label}
+        checked={on}
+        onChange={(v) => {
+          setOn(v);
+          setChanged(true);
+          setError(null);
+          lowMemorySet(v).catch((e) => {
+            setError(tBackend(String(e)));
+            void lowMemoryGet().then(setOn);
+          });
+        }}
+      />
+    </Row>
   );
 }
 
