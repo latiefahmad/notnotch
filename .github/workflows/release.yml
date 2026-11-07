@@ -242,8 +242,9 @@ jobs:
         run: |
           set -euo pipefail
           tag="notnotch-v$VERSION"
-          mkdir assets
-          cd assets
+          # A fresh folder of its own: "assets" is the logo folder in the checkout, so it already exists.
+          work="$(mktemp -d)"
+          cd "$work"
           gh release download "$tag" -R "$GITHUB_REPOSITORY" --pattern '*'
           rm -f SHA256SUMS
           # The release is complete: both installers and zips with their signatures, and all six updater entries.
@@ -259,10 +260,9 @@ jobs:
           # Every signature must come from the key the app ships (tauri.conf.json → plugins.updater.pubkey).
           # Signed with another key (a wrong or rotated repository secret), every installed copy refuses the
           # update as unverifiable: stop here, while the release is still a prerelease.
-          node ../scripts/verify-signing-key.mjs latest.json
-          sha256sum -- * > ../SHA256SUMS
-          sha256sum -c ../SHA256SUMS
-          cd ..
+          node "$GITHUB_WORKSPACE/scripts/verify-signing-key.mjs" latest.json
+          sha256sum -- * > SHA256SUMS
+          sha256sum -c SHA256SUMS
           cat SHA256SUMS
           gh release upload "$tag" SHA256SUMS -R "$GITHUB_REPOSITORY" --clobber
           # Every file is in place: only now does the release become the latest one, which the updater reads.
