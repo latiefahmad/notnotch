@@ -6,6 +6,7 @@ import { t, tBackend } from "../../i18n";
 import { HeaderActions, HeaderButton } from "../../notch/header";
 import { navigate } from "../../notch/nav";
 import { discord, type DiscordCall } from "../../platform/services";
+import { GuildIcon } from "./GuildIcon";
 import { Button, Empty } from "../../ui/controls";
 import { discordState } from "./store";
 
@@ -91,26 +92,6 @@ export function DiscordView() {
         </div>
       </div>
     </div>
-  );
-}
-
-/** Server icon; initials without one (like Discord itself). */
-export function GuildIcon({ call, size }: { call: DiscordCall; size: number }) {
-  const name = call.guildName ?? call.channelName;
-  const initials = name
-    .split(/\s+/)
-    .map((w) => w[0])
-    .join("")
-    .slice(0, 3);
-  const radius = size * 0.3;
-  if (call.guildIcon) return <img src={call.guildIcon} alt="" draggable={false} className="shrink-0 object-cover" style={{ width: size, height: size, borderRadius: radius }} />;
-  return (
-    <span
-      className="flex shrink-0 items-center justify-center bg-fill-3 font-semibold text-label"
-      style={{ width: size, height: size, borderRadius: radius, fontSize: size >= 32 ? undefined : 9 }}
-    >
-      <span className={size >= 32 ? "text-body" : undefined}>{initials}</span>
-    </span>
   );
 }
 

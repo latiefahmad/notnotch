@@ -1,4 +1,5 @@
-import type { ComponentType } from "react";
+import { lazy, type ComponentType } from "react";
+import type React from "react";
 import {
   ArrowsLeftRight,
   BellSimple,
@@ -29,38 +30,46 @@ import {
 import { DepotIcon } from "../ui/icons";
 import type { Hue } from "../features/themes/hues";
 import { DiscordLogo } from "../ui/brands";
-import { OverviewView } from "../features/overview/OverviewView";
-import { NowPlayingView } from "../features/now-playing/NowPlayingView";
-import { TimerView } from "../features/timer/TimerView";
-import { TodosView } from "../features/todos/TodosView";
-import { NotesView } from "../features/notes/NotesView";
-import { ClipboardView } from "../features/clipboard/ClipboardView";
-import { ShelfView } from "../features/shelf/ShelfView";
-import { AskView } from "../features/ask/AskView";
-import { ConvertView } from "../features/convert/ConvertView";
-import { TradingView } from "../features/trading/TradingView";
-import { UsageView } from "../features/usage/UsageView";
-import { WeatherView } from "../features/weather/WeatherView";
-import { SystemView } from "../features/system/SystemView";
-import { DiscordView } from "../features/discord/DiscordView";
-import { VaultView } from "../features/vault/VaultView";
-import { WaterView } from "../features/water/WaterView";
-import { ScratchpadView } from "../features/scratchpad/ScratchpadView";
+
+/*
+ * Tool views load on first use (Notch.tsx wraps them in a Suspense), so a fresh start only parses
+ * and holds the overview and the shell: the 25 tool bundles together were a sizable share of the
+ * renderer's memory. `size` and icon stay static; only the view component is deferred.
+ */
+
+const OverviewView = lazy(() => import("../features/overview/OverviewView").then((m) => ({ default: m.OverviewView })));
+const NowPlayingView = lazy(() => import("../features/now-playing/NowPlayingView").then((m) => ({ default: m.NowPlayingView })));
+const TimerView = lazy(() => import("../features/timer/TimerView").then((m) => ({ default: m.TimerView })));
+const TodosView = lazy(() => import("../features/todos/TodosView").then((m) => ({ default: m.TodosView })));
+const NotesView = lazy(() => import("../features/notes/NotesView").then((m) => ({ default: m.NotesView })));
+const ClipboardView = lazy(() => import("../features/clipboard/ClipboardView").then((m) => ({ default: m.ClipboardView })));
+const ShelfView = lazy(() => import("../features/shelf/ShelfView").then((m) => ({ default: m.ShelfView })));
+const AskView = lazy(() => import("../features/ask/AskView").then((m) => ({ default: m.AskView })));
+const ConvertView = lazy(() => import("../features/convert/ConvertView").then((m) => ({ default: m.ConvertView })));
+const TradingView = lazy(() => import("../features/trading/TradingView").then((m) => ({ default: m.TradingView })));
+const UsageView = lazy(() => import("../features/usage/UsageView").then((m) => ({ default: m.UsageView })));
+const WeatherView = lazy(() => import("../features/weather/WeatherView").then((m) => ({ default: m.WeatherView })));
+const SystemView = lazy(() => import("../features/system/SystemView").then((m) => ({ default: m.SystemView })));
+const DiscordView = lazy(() => import("../features/discord/DiscordView").then((m) => ({ default: m.DiscordView })));
+const VaultView = lazy(() => import("../features/vault/VaultView").then((m) => ({ default: m.VaultView })));
+const WaterView = lazy(() => import("../features/water/WaterView").then((m) => ({ default: m.WaterView })));
+const ScratchpadView = lazy(() => import("../features/scratchpad/ScratchpadView").then((m) => ({ default: m.ScratchpadView })));
+const NoticesView = lazy(() => import("../features/notices/NoticesView").then((m) => ({ default: m.NoticesView })));
+const SettingsView = lazy(() => import("../features/settings/SettingsView").then((m) => ({ default: m.SettingsView })));
+const TerminalView = lazy(() => import("../features/terminal/TerminalView").then((m) => ({ default: m.TerminalView })));
+const LauncherView = lazy(() => import("../features/launcher/LauncherView").then((m) => ({ default: m.LauncherView })));
+const GithubView = lazy(() => import("../features/github/GithubView").then((m) => ({ default: m.GithubView })));
+const CalendarView = lazy(() => import("../features/calendar/CalendarView").then((m) => ({ default: m.CalendarView })));
+const CaptureView = lazy(() => import("../features/capture/CaptureView").then((m) => ({ default: m.CaptureView })));
+const SetupView = lazy(() => import("../features/setup/SetupView").then((m) => ({ default: m.SetupView })));
+const WhatsNewView = lazy(() => import("../features/whatsnew/WhatsNewView").then((m) => ({ default: m.WhatsNewView })));
+const RecorderView = lazy(() => import("../features/recorder/RecorderView").then((m) => ({ default: m.RecorderView })));
+const CameraView = lazy(() => import("../features/camera/CameraView").then((m) => ({ default: m.CameraView })));
+const FindView = lazy(() => import("../features/find/FindView").then((m) => ({ default: m.FindView })));
+
+import { Camera, VideoCamera, Waveform } from "@phosphor-icons/react";
 import { QUOTE_LINE_H } from "../features/quotes/QuoteLine";
 import { settings } from "../settings/store";
-import { NoticesView } from "../features/notices/NoticesView";
-import { SettingsView } from "../features/settings/SettingsView";
-import { TerminalView } from "../features/terminal/TerminalView";
-import { LauncherView } from "../features/launcher/LauncherView";
-import { GithubView } from "../features/github/GithubView";
-import { CalendarView } from "../features/calendar/CalendarView";
-import { CaptureView } from "../features/capture/CaptureView";
-import { SetupView } from "../features/setup/SetupView";
-import { WhatsNewView } from "../features/whatsnew/WhatsNewView";
-import { Camera, VideoCamera, Waveform } from "@phosphor-icons/react";
-import { RecorderView } from "../features/recorder/RecorderView";
-import { CameraView } from "../features/camera/CameraView";
-import { FindView } from "../features/find/FindView";
 import { pluginTab } from "../features/plugins/tabs";
 import { isMac } from "../platform/native";
 
@@ -83,7 +92,8 @@ export interface NotchTab {
   /** Its colour in the tool bar while coloured icons are on (Settings, Themes); plugins have none. */
   hue?: Hue;
   size: { w: number; h: number };
-  View: ComponentType;
+  /** A lazy() tool view (or a plain component, for plugins): rendered inside a Suspense in Notch.tsx. */
+  View: ComponentType | React.LazyExoticComponent<ComponentType>;
 }
 
 export const tabs: NotchTab[] = ([

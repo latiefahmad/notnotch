@@ -12,7 +12,7 @@
 //! Nothing is stored or recorded; samples only live in the ring buffer.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -27,8 +27,11 @@ use crate::loopback::{self, ProcessCapture};
 use crate::media::MediaState;
 
 const FFT_SIZE: usize = 1024;
-/// ~40 fps. The frontend interpolates with CSS.
-const TICK: Duration = Duration::from_millis(25);
+/// Fine tick, ~40 fps: a tool is open and the bars are big and central. The frontend interpolates with CSS.
+const FINE_MS: u32 = 25;
+/// Coarse tick for the small bars in the closed notch: 8 fps is plenty at that size and keeps
+/// the loopback, FFT and event traffic idle while nothing watches live.
+const COARSE_MS: u32 = 125;
 /// Bass on the left, treble on the right, log-spaced (Hz).
 const BANDS: [(f32, f32); 4] = [(40.0, 160.0), (160.0, 600.0), (600.0, 2400.0), (2400.0, 9000.0)];
 /// Bands of `audio://spectrum`, log-spaced between these frequencies (Hz).
@@ -92,6 +95,8 @@ fn push(ring: &mut VecDeque<f32>, mono: &mut dyn Iterator<Item = f32>) {
 #[derive(Default)]
 pub struct AudioState {
     enabled: Arc<AtomicBool>,
+    /// Current tick in ms (`FINE_MS` or `COARSE_MS`); the worker re-reads it every round.
+    tick_ms: Arc<AtomicU32>,
     /// The capture thread; parked while off, woken here when turned on.
     worker: Mutex<Option<thread::Thread>>,
 }
@@ -106,8 +111,16 @@ pub fn audio_levels(enabled: bool, state: State<'_, AudioState>) {
     }
 }
 
+/// Fine for the big bars in an open tool, coarse for the small ones in the closed notch.
+#[tauri::command]
+pub fn audio_rate(coarse: bool, state: State<'_, AudioState>) {
+    state.tick_ms.store(if coarse { COARSE_MS } else { FINE_MS }, Ordering::Relaxed);
+}
+
 pub fn spawn(app: AppHandle, state: &AudioState) {
     let enabled = state.enabled.clone();
+    let tick_ms = state.tick_ms.clone();
+    tick_ms.store(FINE_MS, Ordering::Relaxed);
     let handle = thread::spawn(move || {
         // Process loopback is created, read and dropped on this thread (MTA; cpal accepts it).
         let _ = unsafe { CoInitializeEx(None, COINIT_MULTITHREADED) };
@@ -132,7 +145,7 @@ pub fn spawn(app: AppHandle, state: &AudioState) {
         let mut sample_rate = 48_000.0f32;
 
         loop {
-            thread::sleep(TICK);
+            thread::sleep(Duration::from_millis(u64::from(tick_ms.load(Ordering::Relaxed))));
 
             if !enabled.load(Ordering::Relaxed) {
                 // Off: close the capture and drop the bars to zero.

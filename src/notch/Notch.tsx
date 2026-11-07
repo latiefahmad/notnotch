@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
+import { Suspense, useEffect, useLayoutEffect, useRef, useState, type RefObject } from "react";
 import { AnimatePresence, animate, frame, motion, useMotionValue, type MotionValue, type Transition } from "motion/react";
 import { GearSix, PushPin, Selection } from "@phosphor-icons/react";
 import { content, springs } from "../design/motion";
@@ -51,8 +51,8 @@ const RESUME_MS = 60_000;
 const NOOP = () => {};
 /** A part seen under the pointer this recently still decides the tool a hover opens (natively the page may miss the pointer leaving). */
 const POINTED_MS = 1500;
-/** Closed this long → lower WebView2's memory target. */
-const MEMORY_LOW_AFTER_MS = 20_000;
+/** Closed this long → lower WebView2's memory target (the system then pages the renderer out within a few seconds). */
+const MEMORY_LOW_AFTER_MS = 5_000;
 
 export function Notch() {
   const { status, open, close, dismiss, toggle, onPointerEnter, onPointerLeave } = useNotchState();
@@ -413,7 +413,9 @@ export function Notch() {
                       exit={{ opacity: 0, transition: content.exit }}
                     >
                       <ToolScope.Provider value={tab.id}>
-                        <tab.View />
+                        <Suspense fallback={null}>
+                          <tab.View />
+                        </Suspense>
                       </ToolScope.Provider>
                     </motion.div>
                   </AnimatePresence>

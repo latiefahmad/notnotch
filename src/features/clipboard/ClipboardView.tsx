@@ -26,7 +26,7 @@ import { content, fade, springs } from "../../design/motion";
 import { HeaderActions, HeaderButton } from "../../notch/header";
 import { MAX_SIZE, requestSize } from "../../notch/size";
 import { findTab } from "../../notch/tabs";
-import { clipboard, useClipboard, type ClipItem, type ClipPreview } from "../../platform/clipboard";
+import { clipboard, useClipboard, useClipboardThumb, type ClipItem, type ClipPreview } from "../../platform/clipboard";
 import { Redacted, Segmented } from "../../ui/controls";
 import { usePresenting } from "../privacy/store";
 import { t } from "../../i18n";
@@ -75,7 +75,7 @@ export function ClipboardView() {
     filter === "all"
       ? all
       : all.filter((i) =>
-          filter === "code" ? code.has(i.id) : filter === "text" ? i.kind === "text" && !code.has(i.id) : i.kind === filter || (filter === "image" && !!i.thumbnail),
+          filter === "code" ? code.has(i.id) : filter === "text" ? i.kind === "text" && !code.has(i.id) : i.kind === filter || (filter === "image" && i.hasThumb),
         );
   const hidden = usePresenting();
   const preview = usePreview(hidden ? null : previewId);
@@ -154,10 +154,10 @@ export function ClipboardView() {
                 hidden={hidden}
                 copied={copied === item.id}
                 selected={previewId === item.id}
-                onClick={() => (item.thumbnail && !hidden ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
+                onClick={() => (item.hasThumb && !hidden ? setPreviewId((p) => (p === item.id ? null : item.id)) : void copy(item.id))}
               />
               <div className="absolute top-2 end-2 flex gap-1 opacity-0 transition-opacity duration-150 group-hover:opacity-100">
-                {item.thumbnail && !hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
+                {item.hasThumb && !hidden && <CardButton label={t("Kopieren")} icon={Copy} onClick={() => void copy(item.id)} />}
                 <CardButton label={t("Entfernen")} icon={X} onClick={() => clipboard.remove(item.id)} />
               </div>
             </motion.div>
@@ -260,7 +260,8 @@ function Card(props: { item: ClipItem; code: boolean; now: number; hidden: boole
   const { item, now, copied, hidden } = props;
   const KindIcon = props.code ? Code : kindIcon[item.kind];
   // Images and copied image files fill the card (not in presentation mode).
-  const isImage = !!item.thumbnail && !hidden;
+  const thumb = useClipboardThumb(item);
+  const isImage = item.hasThumb && !hidden;
 
   return (
     <button
@@ -270,9 +271,9 @@ function Card(props: { item: ClipItem; code: boolean; now: number; hidden: boole
         props.selected ? "ring-2 ring-label ring-inset" : ""
       }`}
     >
-      {isImage && (
+      {isImage && thumb && (
         <>
-          <img src={item.thumbnail!} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />
+          <img src={thumb} alt="" draggable={false} className="absolute inset-0 size-full object-cover" />
           {/* Gradient so icon and time stay readable on any image. */}
           <div className="absolute inset-0 bg-gradient-to-b from-black/60 via-transparent to-black/50" />
         </>
@@ -313,7 +314,7 @@ function Body({ item, code }: { item: ClipItem; code: boolean }) {
       const FileIcon = item.folders === names.length ? Folder : fileIcon(names[0]);
       return (
         <div className="relative min-w-0">
-          {!item.thumbnail && <FileIcon size={26} weight="duotone" className="mb-1.5 text-label-2" />}
+          {!item.hasThumb && <FileIcon size={26} weight="duotone" className="mb-1.5 text-label-2" />}
           <p className="line-clamp-2 text-footnote font-medium text-label [overflow-wrap:anywhere]">{names[0]}</p>
           {names.length > 1 && <p className="text-caption text-label-3">{t("+{n} weitere", { n: names.length - 1 })}</p>}
         </div>

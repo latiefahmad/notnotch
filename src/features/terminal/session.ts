@@ -74,7 +74,9 @@ async function load() {
     theme,
     fontFamily: '"Cascadia Mono", "Cascadia Code", Consolas, monospace',
     fontSize: settings.get().terminal.fontSize,
-    scrollback: 5000,
+    // Kept for the app's lifetime once the terminal ran; 1000 lines (VS Code's default) instead of
+    // xterm's 1000-line default times five: scrollback cells are a solid chunk of renderer memory.
+    scrollback: 1000,
     cursorStyle: "bar",
     // Blinking would keep a timer running while the notch sits open and idle.
     cursorBlink: false,

@@ -230,15 +230,21 @@ pub fn run() {
             media::media_lyrics,
             #[cfg(windows)]
             memory::memory_low,
+            #[cfg(windows)]
+            memory::low_memory_get,
+            #[cfg(windows)]
+            memory::low_memory_set,
             clipboard::clipboard_list,
             clipboard::clipboard_mode,
             clipboard::clipboard_copy,
             clipboard::clipboard_delete,
             clipboard::clipboard_clear,
             clipboard::clipboard_preview,
+            clipboard::clipboard_thumbnail,
             clipboard::clipboard_paste_files,
             keyboard_focus,
             audio::audio_levels,
+            audio::audio_rate,
             ai::ai_chat,
             ai::ai_cancel,
             secrets::secret_set,
@@ -468,6 +474,9 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             app.set_activation_policy(tauri::ActivationPolicy::Accessory);
             shell::init(app);
+            // Before the first window exists: WebView2 reads its arguments once (memory.rs).
+            #[cfg(windows)]
+            memory::apply_low_memory(app.handle());
             let window = portable::create_window(app)?;
             display::place(&window, &app.state::<display::DisplayState>())?;
             window.show()?;

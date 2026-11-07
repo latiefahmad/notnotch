@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { isNative } from "../native";
@@ -9,7 +9,10 @@ export interface ClipItem {
   kind: "text" | "link" | "image" | "files";
   /** Text, link, "1920 × 1080" for images, file names (one per line) for files. */
   text: string;
-  thumbnail: string | null;
+  /** Whether a card thumbnail exists (images and copied image files); fetch it per card with `useClipboardThumb`. */
+  hasThumb: boolean;
+  /** Browser mock only: the demo card images. Native cards fetch theirs from Rust. */
+  thumbnail?: string | null;
   /** Files: how many entries are folders. */
   folders: number;
   /** Unix time in ms. */
@@ -64,15 +67,15 @@ function createNative(): ClipboardSource {
 // Sample data for the browser prototype.
 function createMock(): ClipboardSource {
   const now = Date.now();
-  let items: ClipItem[] = showcase ? showcaseClips.map(({ age, ...c }) => ({ ...c, copiedAt: now - age })) : [
-    { id: 7, kind: "image", text: "1600 × 1000", thumbnail: demoImage(1600, 1000), folders: 0, copiedAt: now - 5_000 },
-    { id: 8, kind: "image", text: "900 × 1400", thumbnail: demoImage(900, 1400), folders: 0, copiedAt: now - 60_000 },
-    { id: 1, kind: "link", text: "https://github.com/Lakr233/NotchDrop", thumbnail: null, folders: 0, copiedAt: now - 20_000 },
-    { id: 2, kind: "text", text: "Die letzten 10 % Feinschliff kosten die meiste Zeit.", thumbnail: null, folders: 0, copiedAt: now - 120_000 },
-    { id: 3, kind: "files", text: "Rechnung-Oktober.pdf\nVertrag.docx", thumbnail: null, folders: 0, copiedAt: now - 840_000 },
-    { id: 4, kind: "files", text: "Projekte", thumbnail: null, folders: 1, copiedAt: now - 1_800_000 },
-    { id: 5, kind: "text", text: "SpringVector3NaturalMotionAnimation", thumbnail: null, folders: 0, copiedAt: now - 3_600_000 },
-    { id: 6, kind: "text", text: "npm run tauri dev", thumbnail: null, folders: 0, copiedAt: now - 7_200_000 },
+  let items: ClipItem[] = showcase ? showcaseClips.map(({ age, ...c }) => ({ ...c, hasThumb: !!c.thumbnail, copiedAt: now - age })) : [
+    { id: 7, kind: "image", text: "1600 × 1000", hasThumb: true, thumbnail: demoImage(1600, 1000), folders: 0, copiedAt: now - 5_000 },
+    { id: 8, kind: "image", text: "900 × 1400", hasThumb: true, thumbnail: demoImage(900, 1400), folders: 0, copiedAt: now - 60_000 },
+    { id: 1, kind: "link", text: "https://github.com/Lakr233/NotchDrop", hasThumb: false, folders: 0, copiedAt: now - 20_000 },
+    { id: 2, kind: "text", text: "Die letzten 10 % Feinschliff kosten die meiste Zeit.", hasThumb: false, folders: 0, copiedAt: now - 120_000 },
+    { id: 3, kind: "files", text: "Rechnung-Oktober.pdf\nVertrag.docx", hasThumb: false, folders: 0, copiedAt: now - 840_000 },
+    { id: 4, kind: "files", text: "Projekte", hasThumb: false, folders: 1, copiedAt: now - 1_800_000 },
+    { id: 5, kind: "text", text: "SpringVector3NaturalMotionAnimation", hasThumb: false, folders: 0, copiedAt: now - 3_600_000 },
+    { id: 6, kind: "text", text: "npm run tauri dev", hasThumb: false, folders: 0, copiedAt: now - 7_200_000 },
   ];
   const listeners = new Set<() => void>();
   const set = (next: ClipItem[]) => {
@@ -116,4 +119,52 @@ export const clipboard: ClipboardSource = isNative ? createNative() : createMock
 
 export function useClipboard(): ClipItem[] {
   return useSyncExternalStore(clipboard.subscribe, clipboard.get);
+}
+
+/*
+ * Card thumbnails, one at a time and only for cards on screen: the small PNG comes from Rust
+ * (`clipboard_thumbnail`) the first time a card is visible, so a full history update is plain
+ * metadata and closed things keep no image data. Cards past the LRU get their thumb regenerated
+ * when they scroll back in.
+ */
+const thumbCache = new Map<number, string>();
+const thumbListeners = new Map<number, Set<() => void>>();
+const thumbLoading = new Set<number>();
+
+/** Keeps the frontend cache bounded even if history turns over for days. */
+function remember(id: number, src: string) {
+  thumbCache.set(id, src);
+  while (thumbCache.size > 96) {
+    thumbCache.delete(thumbCache.keys().next().value!);
+  }
+}
+
+function fetchThumb(id: number) {
+  if (thumbCache.has(id) || thumbLoading.has(id)) return;
+  thumbLoading.add(id);
+  void invoke<string | null>("clipboard_thumbnail", { id })
+    .then((src) => {
+      if (src) {
+        remember(id, src);
+        thumbListeners.get(id)?.forEach((l) => l());
+      }
+    })
+    .finally(() => thumbLoading.delete(id));
+}
+
+/** Never fetches native data for mock/browser items. */
+export function useClipboardThumb(item: ClipItem): string | null {
+  const subscribe = useCallback((changed: () => void) => {
+    if (!item.hasThumb || item.thumbnail) return () => {};
+    fetchThumb(item.id);
+    const listeners = thumbListeners.get(item.id) ?? new Set<() => void>();
+    thumbListeners.set(item.id, listeners);
+    listeners.add(changed);
+    return () => listeners.delete(changed);
+  }, [item.id, item.hasThumb, item.thumbnail]);
+  return useSyncExternalStore(
+    subscribe,
+    () => item.thumbnail ?? thumbCache.get(item.id) ?? null,
+    () => null,
+  );
 }

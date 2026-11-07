@@ -60,13 +60,11 @@ struct StoredImage {
     width: u32,
     height: u32,
     png: Vec<u8>,
-    thumbnail: String,
 }
 
 impl StoredImage {
     fn new(img: ImageData<'_>) -> Option<Self> {
         let rgba = image::RgbaImage::from_raw(img.width as u32, img.height as u32, img.bytes.into_owned())?;
-        let thumbnail = thumbnail(&rgba)?;
         let mut png = Vec::new();
         // Fast compression: a 4K screenshot takes well under a second on the poll thread.
         let encoder = image::codecs::png::PngEncoder::new_with_quality(
@@ -75,7 +73,7 @@ impl StoredImage {
             image::codecs::png::FilterType::Adaptive,
         );
         rgba.write_with_encoder(encoder).ok()?;
-        Some(Self { width: rgba.width(), height: rgba.height(), png, thumbnail })
+        Some(Self { width: rgba.width(), height: rgba.height(), png })
     }
 
     fn rgba(&self) -> Option<image::RgbaImage> {
@@ -97,8 +95,8 @@ pub struct ClipItem {
     /// "text" | "link" | "image" | "files"
     kind: &'static str,
     text: String,
-    /// PNG preview as a data URL (images and copied image files).
-    thumbnail: Option<String>,
+    /// Whether `clipboard_thumbnail` returns an image for this entry (images and copied image files).
+    has_thumb: bool,
     /// Files: how many entries are folders (for the icon).
     folders: usize,
     /// Unix time in ms.
@@ -114,6 +112,8 @@ pub struct ClipboardState {
     next_id: Mutex<u64>,
     /// What gets recorded, see `Mode`. Set by the frontend from the enabled tools.
     mode: AtomicU8,
+    /// Card thumbnails made on demand (front = most recently requested, LRU at [`THUMB_CACHE`]).
+    thumbs: Mutex<Vec<(u64, Option<String>)>>,
 }
 
 /// Recording modes. `ALL` is the default, so nothing is missed before the frontend reports.
@@ -230,6 +230,63 @@ pub async fn clipboard_preview(id: u64, state: State<'_, ClipboardState>) -> Res
     })
     .await
     .map_err(|e| e.to_string())
+}
+
+/// How many card thumbnails are cached; cards leaving the view lose theirs and are
+/// regenerated from the stored PNG (or the file) when they come back.
+const THUMB_CACHE: usize = 24;
+
+/// Small card preview of an image entry. Made here on demand: keeping a base64 PNG in every
+/// history entry and re-sending all of them on each change tied the renderer's memory to
+/// the history, visible or not. A hit answers from cache; a miss encodes off the poll thread.
+#[tauri::command]
+pub async fn clipboard_thumbnail(id: u64, state: State<'_, ClipboardState>) -> Result<Option<String>, String> {
+    enum Source {
+        Png(Vec<u8>),
+        File(PathBuf),
+    }
+    let (hit, source) = {
+        let mut thumbs = state.thumbs.lock().unwrap();
+        let entries = state.entries.lock().unwrap();
+        let Some(entry) = entries.iter().find(|e| e.id == id) else {
+            thumbs.retain(|(i, _)| *i != id); // the entry is gone; drop its thumb
+            return Ok(None);
+        };
+        if let Some(at) = thumbs.iter().position(|(i, _)| *i == id) {
+            // Refresh the LRU position and answer from the cache.
+            let (cached_id, src) = thumbs.remove(at);
+            thumbs.insert(0, (cached_id, src.clone()));
+            (src, None)
+        } else {
+            (
+                None,
+                match &entry.content {
+                    Content::Image(img) => Some(Source::Png(img.png.clone())),
+                    Content::Files(files) => files.iter().find(|p| is_image_file(p)).cloned().map(Source::File),
+                    Content::Text(_) => None,
+                },
+            )
+        }
+    };
+    if let Some(src) = hit {
+        return Ok(Some(src));
+    }
+    let Some(source) = source else { return Ok(None) };
+    let thumb = tauri::async_runtime::spawn_blocking(move || match source {
+        Source::Png(png) => thumbnail(&image::load_from_memory_with_format(&png, image::ImageFormat::Png).ok()?.to_rgba8()),
+        Source::File(path) => file_thumbnail(&path),
+    })
+    .await
+    .map_err(|e| e.to_string())?;
+    {
+        let mut thumbs = state.thumbs.lock().unwrap();
+        thumbs.retain(|(i, _)| *i != id);
+        while thumbs.len() >= THUMB_CACHE {
+            thumbs.pop();
+        }
+        thumbs.insert(0, (id, thumb.clone()));
+    }
+    Ok(thumb)
 }
 
 /// Ctrl+V in Shelf/Converter: files from the clipboard as paths. A copied image
@@ -448,7 +505,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 id,
                 kind: if is_url(trimmed) { "link" } else { "text" },
                 text: trimmed.chars().take(PREVIEW_CHARS).collect(),
-                thumbnail: None,
+                has_thumb: false,
                 folders: 0,
                 copied_at,
             }
@@ -458,7 +515,7 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 id,
                 kind: "image",
                 text: format!("{} × {}", img.width, img.height),
-                thumbnail: Some(img.thumbnail.clone()),
+                has_thumb: true,
                 folders: 0,
                 copied_at,
             }
@@ -468,10 +525,12 @@ fn describe(id: u64, content: &Content) -> Option<ClipItem> {
                 .iter()
                 .map(|p| p.file_name().map(|n| n.to_string_lossy().into_owned()).unwrap_or_else(|| p.display().to_string()))
                 .collect();
-            // First image file as preview, so copied photos look like photos.
-            let thumbnail = files.iter().find(|p| is_image_file(p)).and_then(|p| file_thumbnail(p));
+            // First image file is the card's preview and opens the large one (`clipboard_thumbnail`).
+            let has_thumb = files.iter().find(|p| is_image_file(p)).is_some_and(|p| {
+                std::fs::metadata(p).map(|m| m.len() <= MAX_THUMB_FILE_BYTES).unwrap_or(false)
+            });
             let folders = files.iter().filter(|p| p.is_dir()).count();
-            ClipItem { id, kind: "files", text: names.join("\n"), thumbnail, folders, copied_at }
+            ClipItem { id, kind: "files", text: names.join("\n"), has_thumb, folders, copied_at }
         }
     })
 }
@@ -542,6 +601,5 @@ mod tests {
         assert_eq!((stored.width, stored.height), (w, h));
         assert!(back == shot, "pixels changed");
         assert!(stored.png.len() * 5 < raw, "not compressed enough");
-        assert!(stored.thumbnail.starts_with("data:image/png;base64,"));
     }
 }

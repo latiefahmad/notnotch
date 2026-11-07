@@ -2,7 +2,7 @@ import { createStore } from "../../lib/store";
 import { capture, type CaptureRecState } from "../../platform/services";
 import { isNative } from "../../platform/native";
 import { settings } from "../../settings/store";
-import { addToShelf } from "../shelf/ShelfView";
+import { addToShelf } from "../shelf/store";
 import type { RecClock } from "./clock";
 
 /*

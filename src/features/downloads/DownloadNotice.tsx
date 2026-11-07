@@ -4,7 +4,7 @@ import { measureText } from "../../notch/row/measure";
 import { Marquee } from "../../notch/row/Marquee";
 import { NOTICE_BUTTON as BUTTON, NoticeButton } from "../../notch/row/NoticeButton";
 import { revealFile, type DownloadFinished } from "../../platform/services";
-import { addToShelf } from "../shelf/ShelfView";
+import { addToShelf } from "../shelf/store";
 import { t } from "../../i18n";
 import { dismissDownload } from "./store";
 

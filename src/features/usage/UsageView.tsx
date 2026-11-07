@@ -20,27 +20,11 @@ import { refreshTokens, refreshUsage, usage, useTokens, useUsageViewer } from ".
 import { formatAmount, formatCost, formatTokens } from "./format";
 import { dayStart, totals, type Totals } from "./tokens";
 import { usePresenting } from "../privacy/store";
+import { windowLabel } from "./windowLabel";
 
 /** What a stale card adds: its reason on up to two lines and the renew link. */
 const STALE_ROWS = 56;
 
-const windowLabels: Record<string, string> = {
-  session: "Session",
-  weekly: "Woche",
-  "weekly-opus": "Woche · Opus",
-  "weekly-sonnet": "Woche · Sonnet",
-  "session-3p": "Session · Claude/GPT",
-  "weekly-3p": "Woche · Claude/GPT",
-  daily: "Heute",
-  monthly: "Monat",
-  "key-limit": "Schlüssellimit",
-  "monthly-tools": "Tool-Aufrufe im Monat",
-};
-
-/** The limit window's name, translated ("model:Opus" is just "Opus"). */
-export function windowLabel(kind: string): string {
-  return kind.startsWith("model:") ? kind.slice(6) : t(windowLabels[kind] ?? kind);
-}
 
 export const usageError: Record<string, string> = {
   "not-found": "Nicht auf diesem PC gefunden",

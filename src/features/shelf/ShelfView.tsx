@@ -20,13 +20,13 @@ import {
   type Icon,
 } from "@phosphor-icons/react";
 import { fade, springs } from "../../design/motion";
-import { createStore } from "../../lib/store";
 import { formatBytes } from "../../lib/format";
 import { drop, pasteFiles, takeDropped, usePasteFiles } from "../../platform/drop";
 import { HeaderActions, HeaderButton } from "../../notch/header";
-import { clipboardText, copyFiles, filePreview, openFile, probeFiles, revealFile, shelfDragOut, type FileKind } from "../../platform/services";
-import { addFiles, addText, dragPayload, isText, keyOf, normalizeItems, removeKeys, type FileItem, type ShelfItem, type TextItem } from "./model";
+import { clipboardText, copyFiles, filePreview, openFile, revealFile, shelfDragOut, type FileKind } from "../../platform/services";
+import { dragPayload, isText, keyOf, removeKeys, type FileItem, type TextItem } from "./model";
 import { NONE, clickSelect, dragKeys, prune, type Selection } from "./selection";
+import { addToShelf, addTextCard, draggingOut, shelf } from "./store";
 import { t } from "../../i18n";
 import { usePresenting } from "../privacy/store";
 import { Redacted } from "../../ui/controls";
@@ -43,28 +43,14 @@ import { Redacted } from "../../ui/controls";
  * Select several: Ctrl+click, Shift+click or the select button; then drag, copy or remove
  * them together.
  */
-const shelf = createStore<ShelfItem[]>([], { persist: "shelf" });
-shelf.set(normalizeItems);
-
-/** A drag out of the shelf is running: its own drop overlay and drops back stay quiet. */
-const draggingOut = createStore(false);
-
 /** Movement in px before a press on a card becomes a drag. */
 const DRAG_START = 6;
 
-/** Puts files at the front of the Shelf (also used by Capture for new screenshots). */
-export function addToShelf(paths: string[]) {
-  void probeFiles(paths).then(({ files }) => shelf.set((list) => addFiles(list, files, Date.now())));
-}
-
 const kindIcon: Record<FileKind, Icon> = { image: ImageSquare, audio: FileAudio, video: FileVideo, document: FileText, table: Table, other: File };
 
-const newTextId = () => `text-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 7)}`;
-
 function keepText(text: string) {
-  shelf.set((list) => addText(list, text, Date.now(), newTextId()));
+  addTextCard(text);
 }
-
 /** Ctrl+V or the paste button: files or an image first, otherwise text becomes a card. */
 async function pasteTextFallback(): Promise<boolean> {
   const text = await clipboardText();

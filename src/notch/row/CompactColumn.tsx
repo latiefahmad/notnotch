@@ -186,7 +186,7 @@ export function CompactColumn({ parts, room, onSize }: { parts: boolean; room: n
     if (!closed.parts[id] && id !== "readings") continue;
     if (id === "timer" && running) fixed.push({ id, w: timerWidth(timer.get().duration), h: 20, draw: () => <TimerPart paused={false} /> });
     else if (id === "discord" && call) fixed.push({ id, w: DISCORD_WIDTH, h: 20, draw: () => <DiscordPart call={call} paused={false} /> });
-    else if (id === "equalizer" && np && playing) fixed.push({ id, w: 16, h: 16, draw: () => <Equalizer playing={np.isPlaying} /> });
+    else if (id === "equalizer" && np && playing) fixed.push({ id, w: 16, h: 16, draw: () => <Equalizer playing={np.isPlaying} coarse /> });
     else if (id === "github" && gh) fixed.push({ id, w: githubWidth(gh.count), h: 16, draw: () => <GithubPart count={gh.count} level={gh.level} /> });
     else if (id === "clock") fixed.push({ id, w: clockWidth(closed.clockSeconds, h12), h: 16, draw: () => <Clock seconds={closed.clockSeconds} h12={h12} paused={false} /> });
     else if (id === "rings" && rings.length) ringsAt = fixed.length;

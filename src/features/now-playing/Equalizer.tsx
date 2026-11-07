@@ -44,8 +44,9 @@ const WAVE_STROKE = 1.75;
 /**
  * `tint` = Tailwind background class for the bars (Discord: green instead of accent).
  * `look` is read once: give the element a `key` that changes with it.
+ * `coarse` marks the small bars in the closed notch: Rust then ticks 8 fps instead of 40.
  */
-export function Equalizer({ playing, height = 12, tint = "bg-accent", look = "bars" }: { playing: boolean; height?: number; tint?: string; look?: EqualizerLook }) {
+export function Equalizer({ playing, height = 12, tint = "bg-accent", look = "bars", coarse = false }: { playing: boolean; height?: number; tint?: string; look?: EqualizerLook; coarse?: boolean }) {
   const count = look === "bars" ? 4 : SPECTRUM_BANDS;
   const bars = useRef<(HTMLSpanElement | null)[]>([]);
   const wave = useRef<SVGPathElement>(null);
@@ -67,7 +68,8 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent", look = "ba
     return () => window.clearTimeout(id);
   }, [playing]);
 
-  // Subscribe to real levels; unsubscribe with a delay after pausing.
+  // Subscribe to real levels; unsubscribe with a delay after pausing. The subscription
+  // re-creates when `coarse` changes, so the Rust rate follows the notch's open state.
   const off = useRef<(() => void) | null>(null);
   useEffect(() => {
     if (!audioLevelsAvailable) return;
@@ -75,7 +77,7 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent", look = "ba
       const store = (values: readonly number[]) => {
         levels.current = { values, at: performance.now() };
       };
-      off.current ??= look === "bars" ? subscribeLevels(store) : subscribeSpectrum(store);
+      off.current ??= look === "bars" ? subscribeLevels(store, coarse) : subscribeSpectrum(store, coarse);
       return;
     }
     const id = window.setTimeout(() => {
@@ -83,7 +85,7 @@ export function Equalizer({ playing, height = 12, tint = "bg-accent", look = "ba
       off.current = null;
     }, RELEASE_CAPTURE_MS);
     return () => window.clearTimeout(id);
-  }, [playing, look]);
+  }, [playing, look, coarse]);
   useEffect(
     () => () => {
       off.current?.();

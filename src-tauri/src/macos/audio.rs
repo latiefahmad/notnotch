@@ -11,4 +11,9 @@ pub fn audio_levels(enabled: bool) {
     let _ = enabled;
 }
 
+#[tauri::command]
+pub fn audio_rate(coarse: bool) {
+    let _ = coarse;
+}
+
 pub fn spawn(_: AppHandle, _: &AudioState) {}
