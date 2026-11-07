@@ -36,6 +36,8 @@ mod media;
 #[cfg(windows)]
 mod media_pick;
 #[cfg(windows)]
+mod media_title;
+#[cfg(windows)]
 mod memory;
 #[cfg(windows)]
 mod mirror;

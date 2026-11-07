@@ -187,6 +187,12 @@ pub fn spawn(app: AppHandle) {
         let mut last: Option<NowPlaying> = None;
         let mut last_sent_at = SystemTime::now();
         let mut artwork = Artwork { key: String::new(), since: Instant::now(), data: None };
+        // Last window-title fallback and when it was read: enumerating WASAPI sessions and every
+        // window is far too much for the 400 ms poll, and a title changes at track speed, not faster.
+        let mut sounding: Option<(Vec<crate::media_title::Seen>, Instant)> = None;
+        // The last track a title named per app. A player that drops its title back to the bare app
+        // name when paused (ytbplus does) would otherwise make the notch forget what is paused.
+        let mut last_tracks: Vec<(String, String)> = Vec::new();
         // Requested once and reused: a new manager per poll is a cross-process
         // round trip every 400 ms. Dropped (and requested again) on an error.
         let mut manager: Option<SessionManager> = None;
@@ -202,11 +208,27 @@ pub fn spawn(app: AppHandle) {
             let shown = last.as_ref().map(|np| (np.app_id.as_str(), np.title.as_str())).unwrap_or_default();
             let pinned = app.state::<MediaState>().pinned();
             let (session, sources) = pick(manager_ref, shown, pinned.as_deref());
-            let current = session.and_then(|session| read(&session, &mut artwork).ok()).map(|np| NowPlaying { sources, ..np });
+            let current = session.and_then(|session| read(&session, &mut artwork).ok()).map(|np| NowPlaying { sources: sources.clone(), ..np });
+            // The chosen session would not read: fall back to any session that does, so one broken app
+            // cannot blank the notch while another plays.
+            let current = current.or_else(|| {
+                let all = sessions(manager_ref);
+                let info = describe(&all);
+                // Only apps that are playing, in Windows' order.
+                info.iter().zip(all).filter(|((_, _, playing), _)| *playing).find_map(|(_, s)| {
+                    read(&s, &mut artwork).ok().map(|np| NowPlaying { sources: sources.clone(), ..np })
+                })
+            });
             // Nothing found: is the manager still alive (e.g. after an Explorer restart)?
             if current.is_none() && manager_ref.GetSessions().is_err() {
                 manager = None;
             }
+            // Still nothing, but something is sounding: an app that plays audio without registering a
+            // GSMTC session (media_title.rs). Its window title is all there is.
+            let current = match current {
+                Some(np) => Some(np),
+                None => fallback(&mut sounding, &mut last_tracks, &sources),
+            };
 
             // While lyrics show, the frontend's extrapolated position is refreshed now and then, so lines don't drift.
             let resync = app.state::<MediaState>().2.load(Ordering::Relaxed)
@@ -281,10 +303,13 @@ struct Artwork {
     data: Option<String>,
 }
 
+/// Reads the shown track. Only the title and the app ID are required: a desktop player that reports
+/// no artist, no timeline (a stream, a radio) or no playback info is still a track to show, so every
+/// other field falls back instead of failing the whole session (which would blank the notch).
 fn read(session: &Session, artwork: &mut Artwork) -> windows::core::Result<NowPlaying> {
     let props = session.TryGetMediaPropertiesAsync()?.join()?;
     let title = props.Title()?.to_string();
-    let artist = props.Artist()?.to_string();
+    let artist = props.Artist().map(|h| h.to_string()).unwrap_or_default();
     let app_id = session.SourceAppUserModelId()?.to_string();
 
     let key = format!("{app_id}\u{1}{title}\u{1}{artist}");
@@ -298,32 +323,41 @@ fn read(session: &Session, artwork: &mut Artwork) -> windows::core::Result<NowPl
         artwork.data = props.Thumbnail().ok().and_then(|t| load_thumbnail(&t).ok());
     }
 
-    let playback = session.GetPlaybackInfo()?;
-    let is_playing = playback.PlaybackStatus()? == PlaybackStatus::Playing;
-    let controls = playback.Controls().ok();
+    // No playback info (some desktop players): the session is still shown, just not marked as playing.
+    let playback = session.GetPlaybackInfo().ok();
+    let is_playing = playback.as_ref().and_then(|p| p.PlaybackStatus().ok()).is_some_and(|s| s == PlaybackStatus::Playing);
+    let controls = playback.as_ref().and_then(|p| p.Controls().ok());
     let can_seek = controls.as_ref().and_then(|c| c.IsPlaybackPositionEnabled().ok()).unwrap_or(false);
     let offers = |f: fn(&windows::Media::Control::GlobalSystemMediaTransportControlsSessionPlaybackControls) -> windows::core::Result<bool>| {
         controls.as_ref().and_then(|c| f(c).ok()).unwrap_or(false)
     };
     // Apps that offer the control but report no state count as off.
-    let shuffle = offers(|c| c.IsShuffleEnabled()).then(|| playback.IsShuffleActive().and_then(|v| v.Value()).unwrap_or(false));
-    let repeat = offers(|c| c.IsRepeatEnabled()).then(|| match playback.AutoRepeatMode().and_then(|v| v.Value()) {
-        Ok(RepeatMode::Track) => "track",
-        Ok(RepeatMode::List) => "list",
+    let shuffle = offers(|c| c.IsShuffleEnabled()).then(|| playback.as_ref().and_then(|p| p.IsShuffleActive().ok()).and_then(|v| v.Value().ok()).unwrap_or(false));
+    let repeat = offers(|c| c.IsRepeatEnabled()).then(|| match playback.as_ref().and_then(|p| p.AutoRepeatMode().ok()).and_then(|v| v.Value().ok()) {
+        Some(RepeatMode::Track) => "track",
+        Some(RepeatMode::List) => "list",
         _ => "none",
     });
-    let timeline = session.GetTimelineProperties()?;
-    let duration = ticks_to_secs(timeline.EndTime()?.Duration - timeline.StartTime()?.Duration);
-    let mut position = ticks_to_secs(timeline.Position()?.Duration);
-
-    // GSMTC reports the position only sporadically, so extrapolate to now.
-    if is_playing {
-        let updated = timeline.LastUpdatedTime()?.UniversalTime;
-        let elapsed = ticks_to_secs(now_filetime() - updated);
-        if updated > 0 && (0.0..86_400.0).contains(&elapsed) {
-            position += elapsed;
+    // A stream or a radio offers no timeline; it is still a track, shown without a progress bar.
+    let (duration, mut position) = match session.GetTimelineProperties() {
+        Ok(timeline) => {
+            let duration = match (timeline.EndTime(), timeline.StartTime()) {
+                (Ok(end), Ok(start)) => ticks_to_secs(end.Duration - start.Duration),
+                _ => 0.0,
+            };
+            let mut position = timeline.Position().map(|p| ticks_to_secs(p.Duration)).unwrap_or(0.0);
+            // GSMTC reports the position only sporadically, so extrapolate to now.
+            if is_playing {
+                let updated = timeline.LastUpdatedTime().map(|t| t.UniversalTime).unwrap_or(0);
+                let elapsed = ticks_to_secs(now_filetime() - updated);
+                if updated > 0 && (0.0..86_400.0).contains(&elapsed) {
+                    position += elapsed;
+                }
+            }
+            (duration, position)
         }
-    }
+        Err(_) => (0.0, 0.0),
+    };
     if duration > 0.0 {
         position = position.clamp(0.0, duration);
     }
@@ -355,6 +389,58 @@ fn image_mime(bytes: &[u8]) -> &'static str {
         Ok(image::ImageFormat::Bmp) => "image/bmp",
         _ => "image/png",
     }
+}
+
+/// How often the window-title fallback is re-read. A title changes within a second or two of the
+/// track, and reading it means walking every audio session and every window.
+const TITLE_POLL: Duration = Duration::from_secs(2);
+
+/// A track from an app that plays audio without a GSMTC session, from its window title.
+///
+/// Cached for `TITLE_POLL` so the 400 ms loop does not walk WASAPI and every window each time.
+/// Position and duration are 0: a title says nothing about them, and the notch shows no bar.
+///
+/// A player may clear its title when paused (ytbplus shows the bare app name). The last track it
+/// named is kept, so a paused song stays on screen instead of vanishing.
+fn fallback(
+    cache: &mut Option<(Vec<crate::media_title::Seen>, Instant)>,
+    last_tracks: &mut Vec<(String, String)>,
+    sources: &[Source],
+) -> Option<NowPlaying> {
+    let stale = cache.as_ref().is_none_or(|(_, at)| at.elapsed() >= TITLE_POLL);
+    if stale {
+        // Apps GSMTC knows are left to GSMTC: their silence is not a reason to guess a title.
+        let known: Vec<String> = sources.iter().map(|s| s.app_id.clone()).collect();
+        *cache = Some((crate::media_title::scan(&known), Instant::now()));
+    }
+    let (seen, _) = cache.as_ref()?;
+
+    // A playing track that names a track wins; then any app that still names one; then anything.
+    let pick = seen.iter().find(|s| s.playing && s.track.is_some()).or_else(|| seen.iter().find(|s| s.track.is_some())).or_else(|| seen.first())?;
+
+    let track = match &pick.track {
+        Some(track) => {
+            crate::media_title::remember(last_tracks, &pick.app_id, track);
+            track.clone()
+        }
+        // The app stopped naming a track: show the one it named before, marked as paused.
+        None => last_tracks.iter().find(|(app, _)| *app == pick.app_id).map(|(_, t)| t.clone())?,
+    };
+
+    Some(NowPlaying {
+        title: track,
+        // A window title carries no separate artist; the whole line is the title.
+        artist: String::new(),
+        artwork: None,
+        is_playing: pick.playing,
+        position: 0.0,
+        duration: 0.0,
+        can_seek: false,
+        app_id: pick.app_id.clone(),
+        shuffle: None,
+        repeat: None,
+        sources: sources.to_vec(),
+    })
 }
 
 /// Only emit when something visible changed or the user seeked.

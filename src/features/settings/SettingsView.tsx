@@ -27,6 +27,7 @@ import {
   Sparkle,
   SquaresFour,
   SignOut,
+  Smiley,
   Stop,
   Timer,
   Waveform,
@@ -955,6 +956,7 @@ const partInfo: Record<PartId, { label: string; icon: Icon; hue: Hue }> = {
   calendar: { label: "Nächster Termin", icon: CalendarBlank, hue: "red" },
   script: { label: "Skript-Anzeigen (notnotch-notify)", icon: TerminalWindow, hue: "slate" },
   downloads: { label: "Downloads", icon: DownloadSimple, hue: "teal" },
+  face: { label: t("Gesicht"), icon: Smiley, hue: "yellow" },
 };
 
 /** Small labelled switch for a part's own options, next to its main switch. */

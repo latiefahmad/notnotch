@@ -35,6 +35,7 @@ import { CAPTION_FONT, fontEpoch, measureText } from "./measure";
 import { RING, Ring, ringProviders, ringValue } from "./parts/Rings";
 import { ReadingView, readingWidth, useReadings } from "./parts/Readings";
 import { Clock, clockWidth } from "./parts/Clock";
+import { FACE_WIDTH, FacePart } from "./parts/FacePart";
 import { TimerPart, timerWidth } from "./parts/TimerPart";
 import { DISCORD_WIDTH, DiscordPart } from "./parts/DiscordPart";
 import { GithubPart, githubWidth, useGithubToday } from "./parts/GithubPart";
@@ -189,6 +190,7 @@ export function CompactColumn({ parts, room, onSize }: { parts: boolean; room: n
     else if (id === "equalizer" && np && playing) fixed.push({ id, w: 16, h: 16, draw: () => <Equalizer playing={np.isPlaying} coarse /> });
     else if (id === "github" && gh) fixed.push({ id, w: githubWidth(gh.count), h: 16, draw: () => <GithubPart count={gh.count} level={gh.level} /> });
     else if (id === "clock") fixed.push({ id, w: clockWidth(closed.clockSeconds, h12), h: 16, draw: () => <Clock seconds={closed.clockSeconds} h12={h12} paused={false} /> });
+    else if (id === "face") fixed.push({ id, w: FACE_WIDTH, h: 20, draw: () => <FacePart paused={false} /> });
     else if (id === "rings" && rings.length) ringsAt = fixed.length;
     else if (id === "readings" && readings.length) {
       // Readings stand where the part is in the order; marked by a placeholder replaced below.

@@ -32,6 +32,7 @@ import { t } from "../../i18n";
 import { awake } from "../../features/overview/store";
 import { DownloadsPart, downloadsCaption, downloadsWidth } from "./parts/DownloadsPart";
 import { downloads } from "../../features/downloads/store";
+import { FACE_WIDTH, FacePart } from "./parts/FacePart";
 
 /** True while `on`, and for `ms` after it turns off: GSMTC reports a short pause on seek and track change. */
 export function useHeld(on: boolean, ms: number): boolean {
@@ -100,6 +101,7 @@ export function CompactRow({ room, scale, covered, onWidth }: { room: number; sc
       fixed(id, downloadsWidth(caption), () => <DownloadsPart list={dl} caption={caption} />);
     }
     else if (id === "clock") fixed(id, clockWidth(closed.clockSeconds, s.units.clock === "12"), () => <Clock seconds={closed.clockSeconds} h12={s.units.clock === "12"} paused={covered} />);
+    else if (id === "face") fixed(id, FACE_WIDTH, () => <FacePart paused={covered} />);
     else if (id === "title" && caption) {
       const text = measureText(caption);
       parts.push({ item: { id, kind: "title", text }, draw: (p) => titleLyric
