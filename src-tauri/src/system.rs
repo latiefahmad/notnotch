@@ -48,6 +48,10 @@ const NO_PING: u64 = u64::MAX;
 const PROCESS_EVERY: Duration = Duration::from_millis(1800);
 /// Entries kept per ranking (CPU, memory); the page shows fewer, the rest replace rows that leave.
 const PROCESS_KEEP: usize = 12;
+/// Program names are cached per exe path (`display_name` reads the exe's version resource, so it must not run twice).
+/// Only kept programs are named, but over days a long-running app would still collect every program ever listed:
+/// past this many the cache is emptied, which costs one file read per shown program and never grows without bound.
+const NAMES_CACHE_MAX: usize = 256;
 /// DXGI is asked again for a counter adapter it did not list (LUIDs change when a driver restarts), at most this often.
 const ADAPTERS_EVERY: Duration = Duration::from_secs(30);
 
@@ -420,7 +424,7 @@ impl Probe {
         keep.extend(heavy);
         for p in &mut keep {
             if let Some(path) = &p.path {
-                p.name = self.names.entry(path.clone()).or_insert_with(|| crate::mixer::display_name(path)).clone();
+                p.name = cached_name(&mut self.names, path, crate::mixer::display_name);
             } else if let Some(stem) = p.name.strip_suffix(".exe").or_else(|| p.name.strip_suffix(".EXE")) {
                 p.name = stem.to_string();
             }
@@ -428,6 +432,20 @@ impl Probe {
         self.processes = keep.clone();
         keep
     }
+}
+
+/// The program name for `path`, resolved once per path: `display_name` reads the exe's version resource, which is too
+/// slow for every poll. The cache is emptied past [`NAMES_CACHE_MAX`], so a long run cannot grow it without bound.
+fn cached_name(cache: &mut HashMap<String, String>, path: &str, name: fn(&str) -> String) -> String {
+    if cache.len() > NAMES_CACHE_MAX {
+        cache.clear();
+    }
+    if let Some(hit) = cache.get(path) {
+        return hit.clone();
+    }
+    let name = name(path);
+    cache.insert(path.to_string(), name.clone());
+    name
 }
 
 /// Per adapter key: (busiest engine kind's usage capped at 100, that kind), and dedicated VRAM in use.
@@ -713,6 +731,26 @@ mod tests {
         let key = "luid_0x00000000_0x0000c5e2";
         assert_eq!(usage[key], (50.0, "VideoDecode".to_string()));
         assert_eq!(vram[key], 1024.0);
+    }
+
+    #[test]
+    fn names_are_cached_per_path() {
+        let mut cache = HashMap::new();
+        let name = |p: &str| p.rsplit('\\').next().unwrap().to_string();
+        assert_eq!(cached_name(&mut cache, r"C:\a\one.exe", name), "one.exe");
+        assert_eq!(cached_name(&mut cache, r"C:\a\one.exe", name), "one.exe");
+        assert_eq!(cache.len(), 1);
+    }
+
+    #[test]
+    fn names_cache_stays_bounded() {
+        let mut cache = HashMap::new();
+        let name = |p: &str| p.to_string();
+        // Far more distinct programs than the cap: the cache must not keep them all.
+        for i in 0..NAMES_CACHE_MAX * 4 {
+            cached_name(&mut cache, &format!(r"C:\app\{i}.exe"), name);
+        }
+        assert!(cache.len() <= NAMES_CACHE_MAX, "cache holds {} names", cache.len());
     }
 
     #[test]
